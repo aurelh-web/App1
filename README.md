@@ -1,8 +1,36 @@
-> **Hinweis:** Dieses Repo enthält inzwischen zwei unabhängige Projekte.
-> Neben ReelMeter (unten) liegt in [`KeyFocus/`](KeyFocus/) ein nativer
-> iOS-MVP, der Apps sperrt und nur per physischer Bankkarte wieder freigibt –
-> inklusive [`KeyFocus/SETUP.md`](KeyFocus/SETUP.md) zu Apples EU-Beschränkung
-> und der Frage, ob eine Bankkarte überhaupt als dauerhafter Schlüssel taugt.
+# Inhalt dieses Repos
+
+Zwei unabhängige Projekte:
+
+### 🔑 KeyFocus – Apps sperren, per Karte entsperren
+
+Nativer iOS-MVP: blockiert ausgewählte Apps über Screen Time und gibt sie nur
+wieder frei, wenn man eine registrierte physische Karte ans iPhone hält.
+
+| Ordner | Was |
+|---|---|
+| [`KeyFocus/`](KeyFocus/) | Swift-Quellen für zwei Apps: **CardProbe** (nur die Messung, iOS 17+) und **KeyFocus** (vollständig, iOS 26+) |
+| [`KeyFocus/SETUP.md`](KeyFocus/SETUP.md) | **Wichtigste Datei.** Apples EU-Beschränkung, benötigte Capabilities, Fehlerdiagnose – und die Antwort auf die Kernfrage |
+| [`webprobe/`](webprobe/) | Dieselbe Messung als Webseite für **Android** – ohne Mac, ohne Apple-Account |
+
+**Offene Kernfrage:** Bleibt die Kennung einer Bankkarte über mehrere Scans
+gleich? Apple garantiert das nirgends, und kontaktlose Zahlkarten würfeln ihre
+UID aus Datenschutzgründen meist neu. Deshalb misst CardProbe genau das, bevor
+irgendetwas darauf aufgebaut wird. Details in
+[`KeyFocus/SETUP.md`](KeyFocus/SETUP.md) §7.
+
+### 📏 ReelMeter – Reels zählen und in Strecke umrechnen
+
+Konzept und Browser-Prototyp für ein Widget, das zeigt, wie viele Instagram
+Reels man geswiped hat und welche Strecke dabei zusammenkommt. Siehe unten.
+
+| Ordner | Was |
+|---|---|
+| `index.html`, `app.js`, `style.css` | Browser-Prototyp |
+| [`native/`](native/) | Architektur-Skizzen für die echte iOS/Android-App |
+| [`tools/`](tools/) | Kalibrier-Werkzeug für die Heuristik |
+
+---
 
 # ReelMeter
 

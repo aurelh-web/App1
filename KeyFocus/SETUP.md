@@ -118,6 +118,45 @@ open KeyFocus.xcodeproj
 Unter **Signing & Capabilities** ein echtes Development Team wählen. Mit
 Team "None" funktionieren weder NFC noch Family Controls.
 
+**Bundle Identifier ändern.** Im Projekt steht `de.example.CardProbe` bzw.
+`de.example.KeyFocus`. Diese Kennungen sind global eindeutig und
+höchstwahrscheinlich schon vergeben – auf etwas Eigenes umstellen, z.B.
+`de.deinname.CardProbe`, sonst scheitert schon die Registrierung der App-ID.
+
+---
+
+## 2b. Wenn der erste Build scheitert
+
+Dieser Code wurde **nie kompiliert** (siehe ganz oben). Die folgenden Fehler
+sind die wahrscheinlichsten und meist in einer Minute behoben.
+
+### Beim Bauen
+
+| Fehler | Ursache und Behebung |
+|---|---|
+| `No such module 'FamilyControls'` | Falsches Scheme. **CardProbe** braucht das nicht – im Scheme-Menü oben umschalten. Tritt es im KeyFocus-Target auf: Capability *Family Controls* fehlt. |
+| `Failed to register bundle identifier` | `de.example.…` ist vergeben. Bundle-ID auf etwas Eigenes ändern. |
+| `No profiles for '…' were found` / `Signing requires a development team` | Unter *Signing & Capabilities* Team auswählen, *Automatically manage signing* an. |
+| `Cannot find 'NFCPaymentTagReaderSession' in scope` | Xcode älter als 26. Die Klasse gibt es erst im iOS-26-SDK. |
+| Fehler in `NFCManager.swift` zur Nebenläufigkeit (`Sendable`, `actor-isolated`) | Der wahrscheinlichste Rest-Fehler. Fehlertext hierher schicken – die Datei ist bewusst so gebaut, dass nur Sendable-Werte den Actor wechseln, aber ungetestet. |
+| Fehler zu `@Observable` / `@Environment` | Deployment Target zu niedrig oder Scheme-Mix. CardProbe braucht mindestens iOS 17. |
+
+### Beim Starten auf dem iPhone
+
+| Symptom | Ursache und Behebung |
+|---|---|
+| App startet, aber der NFC-Dialog erscheint nie | `NFCReaderUsageDescription` fehlt in der Info.plist des gebauten Targets. |
+| `Missing required entitlement` beim Scannen | Capability *Near Field Communication Tag Reading* im Target nicht aktiviert. Entitlements-Datei allein genügt nicht – Xcode muss die App-ID im Portal entsprechend konfigurieren. |
+| „Payment-Session verfügbar: nein" im Debug-Block | Erwartbar außerhalb der EU, ohne EU-Apple-ID oder unter iOS 26. **Kein Fehler.** Auf „Andere Karte" umschalten – dieser Modus ist nicht betroffen. |
+| Karte wird gar nicht erkannt | Im Modus „Zahlkarte" werden nur Zahlkarten erfasst, im Modus „Andere Karte" alles außer Zahlkarten. Anderen Modus probieren. Karte an das **obere** Ende der Rückseite halten und ruhig halten. |
+| Family Controls: Berechtigung schlägt fehl | Gerät muss mit einer Apple-ID angemeldet sein. Betrifft nur KeyFocus, nicht CardProbe. |
+
+### Build-Log für die Fehlersuche mitschicken
+
+In Xcode den Report Navigator öffnen (⌘9), letzten Build auswählen,
+Rechtsklick → *Copy Transcript for All Combined Issues*. Das enthält Datei,
+Zeile und den vollständigen Fehlertext.
+
 ---
 
 ## 3. Erforderliche Xcode-Capabilities
