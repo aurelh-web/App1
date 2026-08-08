@@ -17,24 +17,37 @@ sichtbar, ohne die App extra öffnen zu müssen.
 ## Wichtige Einschränkung zuerst
 
 **Weder iOS noch Android erlauben einer Drittanbieter-App, Swipes gezielt
-innerhalb von Instagram direkt und in Echtzeit mitzulesen.** Das ist kein
-Implementierungsdetail, sondern eine bewusste Sandbox-/Privacy-Grenze beider
-Betriebssysteme. Es gibt zwei ehrliche Wege, trotzdem an belastbare Zahlen zu
-kommen – beide sind in [`native/README.md`](native/README.md) mit
-Trade-offs dokumentiert:
+innerhalb von Instagram direkt und in Echtzeit mitzulesen.** Der Touchscreen
+registriert den Swipe zwar, aber das Betriebssystem stellt das Event
+ausschließlich der App im Vordergrund zu – eine App im Hintergrund sieht davon
+nichts. Das ist keine fehlende Berechtigung, sondern eine bewusste
+Sandbox-Grenze: sonst könnte jede App jede andere als Keylogger für
+Wischgesten und Passworteingaben mitlesen.
 
-- **iOS – Screen-Time-Schätzung** (Standard-Weg, App-Store-fähig): Apples
-  `DeviceActivity`/`FamilyControls`-API liefert echte Nutzungszeit in
-  Instagram. Reels-Anzahl und Strecke werden daraus hochgerechnet
-  (Ø Sekunden pro Reel, Ø Bildschirmhöhe pro Swipe) – eine Schätzung, klar
-  als solche gekennzeichnet.
-- **iOS – ReplayKit-Bildanalyse** (optionaler "genauer Modus"): Nutzer startet
+Es gibt aber mehrere ehrliche Umwege, die etwas *anderes* messen und daraus die
+Reels-Anzahl hochrechnen – alle mit Trade-offs in
+[`native/README.md`](native/README.md) dokumentiert:
+
+- **iOS – Netzwerk-Traffic + Screen Time** (empfohlener Standard,
+  App-Store-fähig): Jedes Reel muss als Video vom Instagram-CDN geladen
+  werden. Über Apples `NetworkExtension` läuft ein rein lokales VPN – kein
+  Traffic verlässt das Gerät –, das diese Ladevorgänge zählt (dieselbe API,
+  die App-Store-Werbeblocker nutzen). Weil Instagram Videos *vorlädt*, wird
+  das Ergebnis mit Screen Time verrechnet: Screen Time sagt, *wann* Instagram
+  wirklich aktiv war, der Traffic sagt, *wie viele* Reels in diesem Fenster
+  liefen. Sichtbar ist nur das dezente VPN-Symbol in der Statusleiste.
+- **iOS – Screen-Time-Schätzung allein** (sparsamster Weg): Apples
+  `DeviceActivity`/`FamilyControls`-API liefert die Nutzungszeit in
+  Instagram, daraus wird über die Ø Reel-Länge hochgerechnet. Grob, aber
+  praktisch aufwandslos.
+- **iOS – ReplayKit-Bildanalyse** (optionaler "Genau-Modus"): Nutzer startet
   bewusst eine Bildschirmaufnahme, on-device wird per Frame-Vergleich jeder
-  harte Szenenwechsel als ein Swipe gezählt. Genauer, aber mit sichtbarem
-  Aufnahme-Indikator (von Apple erzwungen) und höherem Akkuverbrauch.
+  harte Szenenwechsel als ein Swipe gezählt. Am genauesten, aber mit
+  sichtbarem Aufnahme-Indikator (von Apple erzwungen) und höherem
+  Akkuverbrauch.
 - **Android – AccessibilityService** (echte Zählung möglich): Android erlaubt
   mit expliziter Nutzerfreigabe, echte UI-Scroll-Events aus jeder App zu
-  lesen, auch aus Instagram. Genauer als die iOS-Schätzung, aber der Google
+  lesen, auch aus Instagram. Genauer als jede iOS-Variante, aber der Google
   Play Store kann die Zweckentfremdung der Bedienungshilfen-API ablehnen –
   realistischer Vertriebsweg ist Sideload statt Play Store.
 
@@ -46,8 +59,9 @@ verletzt aber Apples Nutzungsbedingungen und wird hier bewusst nicht verfolgt.
 ```
 index.html, style.css, app.js   Browser-Prototyp (siehe unten)
 native/README.md                Trade-off-Übersicht der nativen Datenpfade
-native/ios/*.swift               WidgetKit + Screen-Time + ReplayKit Skizzen
-native/android/*.kt              AccessibilityService + Glance-Widget Skizzen
+native/ios/*.swift              WidgetKit + Netzwerk-Traffic + Screen-Time
+                                + ReplayKit Skizzen
+native/android/*.kt             AccessibilityService + Glance-Widget Skizzen
 ```
 
 ## Browser-Prototyp starten
@@ -81,6 +95,10 @@ echte native App investiert.
   `DEVICES` in `app.js` bzw. `DeviceScreen` in den Swift-Dateien) – für die
   Screen-Time-Schätzung zusätzlich eine angenommene Ø Reel-Länge von 20
   Sekunden (in einer echten App konfigurierbar).
+- Für den Netzwerk-Pfad kommt ein Kalibrierwert dazu: wie viele
+  Video-Segment-Bursts im Schnitt auf ein Reel entfallen
+  (`TrafficHeuristics.burstsPerReel`). Der muss gegen echte Messungen
+  geeicht werden – Reels manuell zählen und mit den Tunnel-Zahlen abgleichen.
 - Diese Vereinfachungen sind bewusst grob gehalten und sollten in einer
   echten App durch Kalibrierung/Nutzerfeedback verfeinert werden.
 
