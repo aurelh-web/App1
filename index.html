@@ -1,181 +1,91 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Zeitbudget – Zahl mit Zeit, nicht mit Geld</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ReelMeter – Reels- &amp; Kilometerzähler</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📏</text></svg>" />
+<link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="brand-icon">⏳</span>
-      <span class="brand-name">Zeitbudget</span>
-    </div>
-    <div class="topbar-actions">
-      <button id="statsBtn" class="btn btn-ghost">📊 Statistik</button>
-      <button id="settingsBtn" class="btn btn-ghost">⚙️ Einstellungen</button>
-    </div>
+  <header class="page-header">
+    <h1>📏 ReelMeter</h1>
+    <p class="tagline">Wie viele Reels hast du geswiped – und wie weit bist du dabei gescrollt?</p>
   </header>
 
-  <main class="container">
-    <section class="intro">
-      <h1>Jeden Tag ein Frei-Kontingent. Danach zahlst du – aber nicht dir.</h1>
-      <p>
-        Jede App hat ein tägliches Frei-Kontingent. Ist es aufgebraucht, kannst du weiter
-        scrollen – aber nur, wenn du dafür einen Betrag spendest. Kein Geld an Instagram,
-        TikTok & Co., sondern an <span id="charityLabel">eine gute Sache</span>.
-      </p>
+  <p class="demo-banner">
+    <strong>Demo-Modus:</strong> Dieser Prototyp zählt Swipes im <em>Feed unten</em>, nicht in der echten
+    Instagram-App – siehe <a href="README.md">README</a> dazu, warum das auf dem echten Handy anders
+    funktionieren muss und wie eine native Version aussehen würde.
+  </p>
+
+  <main class="layout">
+    <section class="phone-column" aria-label="Demo-Feed">
+      <h2>Demo-Feed <span class="hint">(hier swipen zum Testen)</span></h2>
+      <div class="phone-frame">
+        <div class="phone-notch"></div>
+        <div class="feed" id="feed"></div>
+      </div>
+      <p class="hint-text">Maus/Trackpad: hoch- und runterscrollen. Touch: nach oben/unten wischen.</p>
     </section>
 
-    <section id="appGrid" class="app-grid"></section>
+    <section class="widget-column" aria-label="Home-Screen-Widget-Vorschau">
+      <h2>Home-Screen-Widget-Vorschau</h2>
 
-    <section class="add-app-row">
-      <button id="addAppBtn" class="btn btn-secondary">+ App hinzufügen</button>
+      <div class="size-toggle" role="group" aria-label="Widget-Größe">
+        <button type="button" class="size-btn active" data-size="small">Klein</button>
+        <button type="button" class="size-btn" data-size="medium">Mittel</button>
+      </div>
+
+      <div class="widget" id="widget" data-size="small">
+        <div class="widget-row widget-top">
+          <span class="widget-icon">🎞️</span>
+          <span class="widget-title">ReelMeter</span>
+        </div>
+        <div class="widget-stat">
+          <span class="widget-number" id="w-reels-today">0</span>
+          <span class="widget-label">Reels heute</span>
+        </div>
+        <div class="widget-stat">
+          <span class="widget-number" id="w-dist-today">0 m</span>
+          <span class="widget-label">Strecke heute</span>
+        </div>
+
+        <div class="widget-medium-extra">
+          <div class="widget-divider"></div>
+          <div class="widget-row widget-alltime">
+            <div>
+              <span class="widget-number small" id="w-reels-all">0</span>
+              <span class="widget-label">Reels gesamt</span>
+            </div>
+            <div>
+              <span class="widget-number small" id="w-dist-all">0 km</span>
+              <span class="widget-label">Strecke gesamt</span>
+            </div>
+          </div>
+          <div class="week-chart" id="week-chart" aria-label="Reels der letzten 7 Tage"></div>
+          <p class="comparison" id="comparison"></p>
+        </div>
+      </div>
+
+      <div class="settings">
+        <label for="device-select">Gerät (für Strecke pro Swipe)</label>
+        <select id="device-select"></select>
+
+        <button type="button" id="reset-btn" class="reset-btn">Statistik zurücksetzen</button>
+      </div>
+
+      <dl class="raw-stats">
+        <dt>Bildschirmhöhe pro Swipe (gewähltes Gerät)</dt>
+        <dd id="screen-height-info">–</dd>
+      </dl>
     </section>
   </main>
 
-  <!-- Session Modal -->
-  <div id="sessionModal" class="modal-overlay hidden">
-    <div class="modal">
-      <div class="modal-header">
-        <span id="sessionAppIcon" class="session-icon"></span>
-        <h2 id="sessionAppName"></h2>
-        <button class="modal-close" data-close="sessionModal">✕</button>
-      </div>
-      <div class="modal-body session-body">
-        <div class="timer-display" id="timerDisplay">00:00</div>
-        <div class="progress-bar"><div id="sessionProgressFill" class="progress-fill"></div></div>
-        <p id="sessionStatus" class="session-status"></p>
-        <div class="session-actions">
-          <button id="stopSessionBtn" class="btn btn-secondary">Sitzung beenden</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Buy / Donate Modal -->
-  <div id="buyModal" class="modal-overlay hidden">
-    <div class="modal">
-      <div class="modal-header">
-        <h2>Zeit aufgebraucht</h2>
-        <button class="modal-close" data-close="buyModal">✕</button>
-      </div>
-      <div class="modal-body">
-        <p id="buyExplainer" class="buy-explainer"></p>
-
-        <div class="buy-options" id="buyOptions"></div>
-
-        <div class="card-form">
-          <h3>Simulierte Kartenzahlung</h3>
-          <p class="fine-print">
-            Es findet keine echte Zahlung statt. Dies ist ein Prototyp – jede "Zahlung" wird
-            nur lokal auf deinem Gerät als Spendenbetrag verbucht.
-          </p>
-          <div class="field-row">
-            <label>Kartennummer</label>
-            <input type="text" id="cardNumber" placeholder="•••• •••• •••• 4242" maxlength="19" />
-          </div>
-          <div class="field-row two-col">
-            <div>
-              <label>Ablauf</label>
-              <input type="text" id="cardExpiry" placeholder="MM/JJ" maxlength="5" />
-            </div>
-            <div>
-              <label>CVC</label>
-              <input type="text" id="cardCvc" placeholder="123" maxlength="3" />
-            </div>
-          </div>
-          <button id="confirmBuyBtn" class="btn btn-primary btn-full" disabled>
-            Spenden &amp; Zeit freischalten
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Settings Modal -->
-  <div id="settingsModal" class="modal-overlay hidden">
-    <div class="modal">
-      <div class="modal-header">
-        <h2>Einstellungen</h2>
-        <button class="modal-close" data-close="settingsModal">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="field-row">
-          <label>Spendenorganisation</label>
-          <input type="text" id="charityInput" placeholder="z.B. Ärzte ohne Grenzen" />
-        </div>
-        <h3>Apps</h3>
-        <div id="settingsAppList" class="settings-app-list"></div>
-        <button id="resetDayBtn" class="btn btn-ghost btn-full">
-          Tageskontingente zurücksetzen (Demo)
-        </button>
-        <button id="resetAllBtn" class="btn btn-danger btn-full">
-          Alle Daten löschen
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Stats Modal -->
-  <div id="statsModal" class="modal-overlay hidden">
-    <div class="modal">
-      <div class="modal-header">
-        <h2>Statistik</h2>
-        <button class="modal-close" data-close="statsModal">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="stats-summary">
-          <div class="stat-card">
-            <div class="stat-value" id="statDonated">0,00 €</div>
-            <div class="stat-label">Gesamt gespendet</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="statMinutesToday">0 min</div>
-            <div class="stat-label">Genutzt heute</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="statOverBudgetDays">0</div>
-            <div class="stat-label">Tage über Budget</div>
-          </div>
-        </div>
-        <h3>Verlauf</h3>
-        <div id="historyList" class="history-list"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Add App Modal -->
-  <div id="addAppModal" class="modal-overlay hidden">
-    <div class="modal">
-      <div class="modal-header">
-        <h2>Neue App</h2>
-        <button class="modal-close" data-close="addAppModal">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="field-row">
-          <label>Emoji / Icon</label>
-          <input type="text" id="newAppIcon" placeholder="📱" maxlength="4" />
-        </div>
-        <div class="field-row">
-          <label>Name</label>
-          <input type="text" id="newAppName" placeholder="z.B. Snapchat" />
-        </div>
-        <div class="field-row two-col">
-          <div>
-            <label>Frei-Minuten / Tag</label>
-            <input type="number" id="newAppMinutes" value="30" min="1" />
-          </div>
-          <div>
-            <label>Preis je Extra-Minute (€)</label>
-            <input type="number" id="newAppPrice" value="0.10" min="0.01" step="0.01" />
-          </div>
-        </div>
-        <button id="createAppBtn" class="btn btn-primary btn-full">App hinzufügen</button>
-      </div>
-    </div>
-  </div>
+  <footer class="page-footer">
+    <p>Konzept &amp; Prototyp – Details zur echten iOS/Android-Umsetzung, Grenzen und Trade-offs in
+      <a href="native/README.md">native/README.md</a>.</p>
+  </footer>
 
   <script src="app.js"></script>
 </body>

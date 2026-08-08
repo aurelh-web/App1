@@ -1,48 +1,64 @@
-const STORAGE_KEY = "zeitbudget-state-v1";
+const STORAGE_KEY = "reelmeter-state-v1";
 
-const DEFAULT_APPS = [
-  { id: "instagram", icon: "📷", name: "Instagram", dailyFreeMinutes: 30, pricePerMinute: 0.10 },
-  { id: "tiktok", icon: "🎵", name: "TikTok", dailyFreeMinutes: 20, pricePerMinute: 0.15 },
-  { id: "youtube", icon: "▶️", name: "YouTube", dailyFreeMinutes: 40, pricePerMinute: 0.08 },
-  { id: "x", icon: "🐦", name: "X / Twitter", dailyFreeMinutes: 20, pricePerMinute: 0.10 },
+// Ungefähre physische Bildschirmhöhe (Hochformat, cm) – nur zur Demo, keine
+// Herstellerangabe im strengen Sinn. Bestimmt, wie viel "Strecke" ein Swipe zählt.
+const DEVICES = [
+  { id: "iphone-se", label: "iPhone SE", heightCm: 12.2 },
+  { id: "iphone-14", label: "iPhone 14 / 15", heightCm: 14.7 },
+  { id: "iphone-15-pro-max", label: "iPhone 15/16 Pro Max", heightCm: 16.0 },
+  { id: "pixel-8", label: "Google Pixel 8", heightCm: 14.7 },
+  { id: "galaxy-s24-ultra", label: "Samsung Galaxy S24 Ultra", heightCm: 16.2 },
 ];
 
-const BUY_PACKAGES = [
-  { minutes: 5, factor: 5 },
-  { minutes: 15, factor: 15 },
-  { minutes: 30, factor: 30 },
+const REEL_CONTENT = [
+  ["🍜", "Rezept: 5-Minuten-Ramen"],
+  ["🐶", "Hund reagiert auf Türklingel"],
+  ["✈️", "3 Tage Lissabon für unter 300€"],
+  ["🏋️", "Push-Day in 60 Sekunden"],
+  ["🎸", "Cover: bekannter Song, unerkannt"],
+  ["🧠", "Fun Fact über das Gehirn"],
+  ["🌆", "Timelapse: Sonnenuntergang Stadt"],
+  ["🐱", "Katze erschrickt sich vor Gurke"],
+  ["📈", "3 Investment-Fehler, die jeder macht"],
+  ["🍕", "Pizza-Hack, den keiner kennt"],
+  ["💃", "Trend-Tanz Nummer 4.827"],
+  ["🚗", "Auto-Restauration, Vorher/Nachher"],
+  ["🧳", "Packliste für den nächsten Trip"],
+  ["🎮", "Clutch-Moment im Ranked-Match"],
+  ["🧑‍🍳", "Streetfood aus Bangkok"],
 ];
 
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+function todayKey(d = new Date()) {
+  return d.toISOString().slice(0, 10);
+}
+
+function defaultState() {
+  return {
+    deviceId: DEVICES[1].id,
+    today: { date: todayKey(), reels: 0, distanceCm: 0 },
+    allTime: { reels: 0, distanceCm: 0 },
+    history: {}, // dateKey -> reels count (für die letzten Tage, exkl. heute)
+  };
 }
 
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw) {
-    try {
-      return migrateState(JSON.parse(raw));
-    } catch {
-      /* fall through to default */
-    }
+  let state;
+  try {
+    state = raw ? JSON.parse(raw) : defaultState();
+  } catch {
+    state = defaultState();
   }
-  return {
-    apps: DEFAULT_APPS,
-    charity: "Ärzte ohne Grenzen",
-    usage: {},
-    extraMinutes: {},
-    transactions: [],
-    donationTotal: 0,
-  };
+  state = rolloverIfNewDay(state);
+  return state;
 }
 
-function migrateState(state) {
-  state.apps ??= DEFAULT_APPS;
-  state.charity ??= "Ärzte ohne Grenzen";
-  state.usage ??= {};
-  state.extraMinutes ??= {};
-  state.transactions ??= [];
-  state.donationTotal ??= 0;
+function rolloverIfNewDay(state) {
+  const key = todayKey();
+  if (state.today.date !== key) {
+    state.history[state.today.date] = state.today.reels;
+    state.today = { date: key, reels: 0, distanceCm: 0 };
+  }
   return state;
 }
 
@@ -52,356 +68,170 @@ function saveState() {
 
 let state = loadState();
 
-let activeSession = null; // { appId, intervalId, secondsUsedThisSession }
-
-function usedSecondsToday(appId) {
-  const day = state.usage[todayKey()] || {};
-  return day[appId] || 0;
+function currentDevice() {
+  return DEVICES.find((d) => d.id === state.deviceId) ?? DEVICES[0];
 }
 
-function setUsedSecondsToday(appId, seconds) {
-  const key = todayKey();
-  state.usage[key] ??= {};
-  state.usage[key][appId] = seconds;
+function registerSwipe() {
+  const heightCm = currentDevice().heightCm;
+  state.today.reels += 1;
+  state.today.distanceCm += heightCm;
+  state.allTime.reels += 1;
+  state.allTime.distanceCm += heightCm;
   saveState();
+  renderWidget();
 }
 
-function extraMinutesToday(appId) {
-  const key = todayKey();
-  state.extraMinutes[key] ??= {};
-  return state.extraMinutes[key][appId] || 0;
+function formatMeters(cm) {
+  const m = cm / 100;
+  if (m < 1000) return `${m.toFixed(m < 10 ? 1 : 0)} m`;
+  return `${(m / 1000).toFixed(2)} km`;
 }
 
-function addExtraMinutesToday(appId, minutes) {
-  const key = todayKey();
-  state.extraMinutes[key] ??= {};
-  state.extraMinutes[key][appId] = (state.extraMinutes[key][appId] || 0) + minutes;
-  saveState();
+function formatKm(cm) {
+  return `${(cm / 100000).toFixed(3)} km`;
 }
 
-function budgetSecondsToday(app) {
-  return (app.dailyFreeMinutes + extraMinutesToday(app.id)) * 60;
+function comparisonText(totalCm) {
+  const km = totalCm / 100000;
+  if (km <= 0) return "Noch keine Strecke – leg los!";
+  if (km < 0.05) return `Erst ${Math.round(totalCm)} cm – weiterswipen für einen Vergleich.`;
+
+  const facts = [
+    { km: 0.33, label: "Eiffelturm-Höhen" },
+    { km: 0.828, label: "Burj-Khalifa-Höhen" },
+    { km: 5, label: "Runden um den Alexanderplatz" },
+    { km: 42.195, label: "Marathon-Strecken" },
+    { km: 289, label: "Strecken Berlin–Hamburg" },
+  ];
+  let best = facts[0];
+  for (const f of facts) {
+    if (km >= f.km * 0.2) best = f;
+  }
+  const times = km / best.km;
+  const timesText = times < 1 ? times.toFixed(2) : times < 10 ? times.toFixed(1) : Math.round(times).toString();
+  return `Das sind ${timesText}× ${best.label} (${km.toFixed(2)} km).`;
 }
 
-function formatTime(totalSeconds) {
-  const s = Math.max(0, Math.round(totalSeconds));
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-}
-
-function formatEuro(amount) {
-  return amount.toLocaleString("de-DE", { style: "currency", currency: "EUR" });
-}
-
-function renderCharityLabel() {
-  document.getElementById("charityLabel").textContent = state.charity || "eine gute Sache";
-}
-
-function renderAppGrid() {
-  const grid = document.getElementById("appGrid");
-  grid.innerHTML = "";
-  state.apps.forEach((app) => {
-    const used = usedSecondsToday(app.id);
-    const budget = budgetSecondsToday(app);
-    const pct = Math.min(100, (used / budget) * 100 || 0);
-    const remaining = Math.max(0, budget - used);
-
-    const card = document.createElement("div");
-    card.className = "app-card";
-    card.innerHTML = `
-      <div class="app-card-head">
-        <span class="app-card-icon">${app.icon}</span>
-        <span class="app-card-name">${app.name}</span>
-      </div>
-      <div class="progress-bar">
-        <div class="progress-fill ${used >= budget ? "over" : ""}" style="width:${pct}%"></div>
-      </div>
-      <div class="app-card-meta">
-        <span>${formatTime(remaining)} übrig</span>
-        <span>${app.dailyFreeMinutes} min frei/Tag</span>
-      </div>
-      <button class="btn btn-primary btn-full open-session" data-app="${app.id}">
-        ${used >= budget ? "Zeit kaufen & starten" : "Sitzung starten"}
-      </button>
+function buildFeed() {
+  const feed = document.getElementById("feed");
+  const cards = [];
+  // 60 Karten reichen für eine Demo-Session; jede Karte wiederholt den Inhalt-Pool.
+  for (let i = 0; i < 60; i++) {
+    const [emoji, caption] = REEL_CONTENT[i % REEL_CONTENT.length];
+    const hue = (i * 47) % 360;
+    const el = document.createElement("div");
+    el.className = "reel";
+    el.style.background = `linear-gradient(160deg, hsl(${hue} 60% 22%), hsl(${(hue + 40) % 360} 55% 12%))`;
+    el.innerHTML = `
+      <span class="index">#${i + 1}</span>
+      <span class="emoji">${emoji}</span>
+      <span class="caption">${caption}</span>
     `;
-    grid.appendChild(card);
-  });
-
-  grid.querySelectorAll(".open-session").forEach((btn) => {
-    btn.addEventListener("click", () => startOrResumeApp(btn.dataset.app));
-  });
-}
-
-function startOrResumeApp(appId) {
-  const app = state.apps.find((a) => a.id === appId);
-  if (!app) return;
-  const used = usedSecondsToday(app.id);
-  const budget = budgetSecondsToday(app);
-  if (used >= budget) {
-    openBuyModal(app);
-  } else {
-    openSessionModal(app);
+    feed.appendChild(el);
+    cards.push(el);
   }
+  return cards;
 }
 
-function openSessionModal(app) {
-  document.getElementById("sessionAppIcon").textContent = app.icon;
-  document.getElementById("sessionAppName").textContent = app.name;
-  document.getElementById("sessionStatus").textContent = "Sitzung läuft …";
-  showModal("sessionModal");
-  runSessionTick(app);
-  activeSession = {
-    appId: app.id,
-    intervalId: setInterval(() => runSessionTick(app), 1000),
-  };
-}
-
-function runSessionTick(app) {
-  let used = usedSecondsToday(app.id);
-  const budget = budgetSecondsToday(app);
-
-  if (used >= budget) {
-    stopActiveSession();
-    closeModal("sessionModal");
-    openBuyModal(app);
-    return;
-  }
-
-  used += 1;
-  setUsedSecondsToday(app.id, used);
-
-  const remaining = Math.max(0, budget - used);
-  document.getElementById("timerDisplay").textContent = formatTime(remaining);
-  const pct = Math.min(100, (used / budget) * 100);
-  document.getElementById("sessionProgressFill").style.width = `${pct}%`;
-  document.getElementById("sessionProgressFill").classList.toggle("over", used >= budget);
-
-  if (used >= budget) {
-    document.getElementById("sessionStatus").textContent = "Frei-Kontingent aufgebraucht.";
-  }
-
-  renderAppGrid();
-}
-
-function stopActiveSession() {
-  if (activeSession) {
-    clearInterval(activeSession.intervalId);
-    activeSession = null;
-  }
-}
-
-let pendingBuyApp = null;
-let selectedPackageIndex = 1;
-
-function openBuyModal(app) {
-  pendingBuyApp = app;
-  selectedPackageIndex = 1;
-  document.getElementById("buyExplainer").textContent =
-    `Dein Frei-Kontingent für ${app.name} ist heute aufgebraucht. Schalte weitere Minuten frei ` +
-    `– der Betrag wird als Spende an ${state.charity || "eine gute Sache"} verbucht.`;
-  renderBuyOptions(app);
-  updateCardFormValidity();
-  showModal("buyModal");
-}
-
-function renderBuyOptions(app) {
-  const container = document.getElementById("buyOptions");
-  container.innerHTML = "";
-  BUY_PACKAGES.forEach((pkg, idx) => {
-    const amount = pkg.minutes * app.pricePerMinute;
-    const row = document.createElement("div");
-    row.className = "buy-option" + (idx === selectedPackageIndex ? " selected" : "");
-    row.innerHTML = `<span>${pkg.minutes} Minuten</span><span class="amount">${formatEuro(amount)}</span>`;
-    row.addEventListener("click", () => {
-      selectedPackageIndex = idx;
-      renderBuyOptions(app);
-    });
-    container.appendChild(row);
-  });
-}
-
-function updateCardFormValidity() {
-  const num = document.getElementById("cardNumber").value.replace(/\s/g, "");
-  const expiry = document.getElementById("cardExpiry").value;
-  const cvc = document.getElementById("cardCvc").value;
-  const valid = num.length >= 12 && /^\d{2}\/\d{2}$/.test(expiry) && cvc.length >= 3;
-  document.getElementById("confirmBuyBtn").disabled = !valid;
-}
-
-function confirmBuy() {
-  if (!pendingBuyApp) return;
-  const pkg = BUY_PACKAGES[selectedPackageIndex];
-  const amount = pkg.minutes * pendingBuyApp.pricePerMinute;
-
-  addExtraMinutesToday(pendingBuyApp.id, pkg.minutes);
-  state.donationTotal += amount;
-  state.transactions.push({
-    date: new Date().toISOString(),
-    appId: pendingBuyApp.id,
-    appName: pendingBuyApp.name,
-    minutes: pkg.minutes,
-    amount,
-  });
-  saveState();
-
-  document.getElementById("cardNumber").value = "";
-  document.getElementById("cardExpiry").value = "";
-  document.getElementById("cardCvc").value = "";
-
-  closeModal("buyModal");
-  renderAppGrid();
-  openSessionModal(pendingBuyApp);
-  pendingBuyApp = null;
-}
-
-function renderSettings() {
-  document.getElementById("charityInput").value = state.charity;
-  const list = document.getElementById("settingsAppList");
-  list.innerHTML = "";
-  state.apps.forEach((app) => {
-    const row = document.createElement("div");
-    row.className = "settings-app-row";
-    row.innerHTML = `
-      <span class="app-icon-small">${app.icon}</span>
-      <span>${app.name}</span>
-      <input type="number" min="1" value="${app.dailyFreeMinutes}" title="Frei-Minuten/Tag" data-field="dailyFreeMinutes" data-app="${app.id}" />
-      <input type="number" min="0.01" step="0.01" value="${app.pricePerMinute}" title="Preis/Minute (€)" data-field="pricePerMinute" data-app="${app.id}" />
-    `;
-    list.appendChild(row);
-  });
-
-  list.querySelectorAll("input").forEach((input) => {
-    input.addEventListener("change", () => {
-      const app = state.apps.find((a) => a.id === input.dataset.app);
-      if (!app) return;
-      const value = parseFloat(input.value);
-      if (!isNaN(value) && value > 0) {
-        app[input.dataset.field] = value;
-        saveState();
-        renderAppGrid();
+function observeFeed(cards) {
+  let activeIndex = -1;
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting && entry.intersectionRatio > 0.6) {
+          const idx = cards.indexOf(entry.target);
+          if (idx !== -1 && idx !== activeIndex) {
+            if (activeIndex !== -1) registerSwipe();
+            activeIndex = idx;
+          }
+        }
       }
+    },
+    { root: document.getElementById("feed"), threshold: [0.6] }
+  );
+  cards.forEach((c) => observer.observe(c));
+}
+
+function renderDeviceSelect() {
+  const select = document.getElementById("device-select");
+  select.innerHTML = DEVICES.map(
+    (d) => `<option value="${d.id}" ${d.id === state.deviceId ? "selected" : ""}>${d.label}</option>`
+  ).join("");
+  select.addEventListener("change", () => {
+    state.deviceId = select.value;
+    saveState();
+    renderWidget();
+  });
+}
+
+function renderWeekChart() {
+  const container = document.getElementById("week-chart");
+  container.innerHTML = "";
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = todayKey(d);
+    const reels = key === state.today.date ? state.today.reels : state.history[key] ?? 0;
+    days.push({ key, reels, label: d.toLocaleDateString("de-DE", { weekday: "narrow" }) });
+  }
+  const max = Math.max(1, ...days.map((d) => d.reels));
+  for (const day of days) {
+    const wrap = document.createElement("div");
+    wrap.className = "week-chart-wrap";
+    wrap.style.flex = "1";
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    bar.style.height = `${Math.max(3, (day.reels / max) * 50)}px`;
+    bar.title = `${day.reels} Reels`;
+    const label = document.createElement("div");
+    label.className = "bar-label";
+    label.textContent = day.label;
+    wrap.appendChild(bar);
+    wrap.appendChild(label);
+    container.appendChild(wrap);
+  }
+}
+
+function renderWidget() {
+  document.getElementById("w-reels-today").textContent = state.today.reels;
+  document.getElementById("w-dist-today").textContent = formatMeters(state.today.distanceCm);
+  document.getElementById("w-reels-all").textContent = state.allTime.reels;
+  document.getElementById("w-dist-all").textContent = formatKm(state.allTime.distanceCm);
+  document.getElementById("comparison").textContent = comparisonText(state.allTime.distanceCm);
+  document.getElementById("screen-height-info").textContent = `${currentDevice().heightCm} cm pro Swipe`;
+  renderWeekChart();
+}
+
+function initSizeToggle() {
+  const buttons = document.querySelectorAll(".size-btn");
+  const widget = document.getElementById("widget");
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      buttons.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      widget.dataset.size = btn.dataset.size;
     });
   });
 }
 
-function renderStats() {
-  document.getElementById("statDonated").textContent = formatEuro(state.donationTotal);
-  const usedToday = Object.values(state.usage[todayKey()] || {}).reduce((a, b) => a + b, 0);
-  document.getElementById("statMinutesToday").textContent = `${Math.round(usedToday / 60)} min`;
-
-  const overBudgetDays = Object.keys(state.usage).filter((day) => {
-    const dayUsage = state.usage[day];
-    return state.apps.some((app) => {
-      const used = dayUsage[app.id] || 0;
-      const extra = (state.extraMinutes[day] && state.extraMinutes[day][app.id]) || 0;
-      return used >= (app.dailyFreeMinutes + extra) * 60 && extra > 0;
-    });
-  }).length;
-  document.getElementById("statOverBudgetDays").textContent = overBudgetDays;
-
-  const historyList = document.getElementById("historyList");
-  historyList.innerHTML = "";
-  if (state.transactions.length === 0) {
-    historyList.innerHTML = `<p class="fine-print">Noch keine gekaufte Zeit.</p>`;
-  }
-  [...state.transactions].reverse().forEach((tx) => {
-    const item = document.createElement("div");
-    item.className = "history-item";
-    const date = new Date(tx.date);
-    item.innerHTML = `
-      <span>${tx.appName} · ${tx.minutes} min</span>
-      <span class="amount">${formatEuro(tx.amount)}</span>
-      <span class="h-date">${date.toLocaleDateString("de-DE")} ${date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</span>
-    `;
-    historyList.appendChild(item);
+function initReset() {
+  document.getElementById("reset-btn").addEventListener("click", () => {
+    if (!confirm("Alle ReelMeter-Statistiken wirklich zurücksetzen?")) return;
+    state = defaultState();
+    saveState();
+    renderWidget();
   });
-}
-
-function showModal(id) {
-  document.getElementById(id).classList.remove("hidden");
-}
-function closeModal(id) {
-  document.getElementById(id).classList.add("hidden");
-  if (id === "sessionModal") {
-    stopActiveSession();
-  }
-}
-
-function addNewApp() {
-  const icon = document.getElementById("newAppIcon").value.trim() || "📱";
-  const name = document.getElementById("newAppName").value.trim();
-  const minutes = parseFloat(document.getElementById("newAppMinutes").value);
-  const price = parseFloat(document.getElementById("newAppPrice").value);
-  if (!name || !minutes || !price) return;
-
-  const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" + Date.now();
-  state.apps.push({ id, icon, name, dailyFreeMinutes: minutes, pricePerMinute: price });
-  saveState();
-  renderAppGrid();
-  renderSettings();
-
-  document.getElementById("newAppIcon").value = "";
-  document.getElementById("newAppName").value = "";
-  document.getElementById("newAppMinutes").value = "30";
-  document.getElementById("newAppPrice").value = "0.10";
-  closeModal("addAppModal");
 }
 
 function init() {
-  renderCharityLabel();
-  renderAppGrid();
-
-  document.querySelectorAll("[data-close]").forEach((btn) => {
-    btn.addEventListener("click", () => closeModal(btn.dataset.close));
-  });
-  document.querySelectorAll(".modal-overlay").forEach((overlay) => {
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) closeModal(overlay.id);
-    });
-  });
-
-  document.getElementById("stopSessionBtn").addEventListener("click", () => {
-    closeModal("sessionModal");
-  });
-
-  document.getElementById("settingsBtn").addEventListener("click", () => {
-    renderSettings();
-    showModal("settingsModal");
-  });
-  document.getElementById("statsBtn").addEventListener("click", () => {
-    renderStats();
-    showModal("statsModal");
-  });
-  document.getElementById("addAppBtn").addEventListener("click", () => showModal("addAppModal"));
-  document.getElementById("createAppBtn").addEventListener("click", addNewApp);
-
-  document.getElementById("charityInput").addEventListener("change", (e) => {
-    state.charity = e.target.value.trim() || "eine gute Sache";
-    saveState();
-    renderCharityLabel();
-  });
-
-  ["cardNumber", "cardExpiry", "cardCvc"].forEach((id) => {
-    document.getElementById(id).addEventListener("input", updateCardFormValidity);
-  });
-  document.getElementById("confirmBuyBtn").addEventListener("click", confirmBuy);
-
-  document.getElementById("resetDayBtn").addEventListener("click", () => {
-    delete state.usage[todayKey()];
-    delete state.extraMinutes[todayKey()];
-    saveState();
-    renderAppGrid();
-  });
-
-  document.getElementById("resetAllBtn").addEventListener("click", () => {
-    if (!confirm("Wirklich alle Daten löschen?")) return;
-    localStorage.removeItem(STORAGE_KEY);
-    state = loadState();
-    renderCharityLabel();
-    renderAppGrid();
-    renderSettings();
-  });
+  renderDeviceSelect();
+  initSizeToggle();
+  initReset();
+  const cards = buildFeed();
+  observeFeed(cards);
+  renderWidget();
 }
 
-init();
+document.addEventListener("DOMContentLoaded", init);
