@@ -1,5 +1,42 @@
 import Foundation
 
+// MARK: - Session-Modus
+
+/// Welche Art Session verwendet wird.
+///
+/// Die beiden unterscheiden sich fundamental in ihren Voraussetzungen:
+///
+/// - `.payment` nutzt `NFCPaymentTagReaderSession`. Nur damit werden Zahlkarten
+///   erkannt – aber erst ab iOS 26 und ausschließlich in der EU.
+/// - `.anyTag` nutzt die normale `NFCTagReaderSession`. Sie erkennt keine
+///   Zahlkarten, dafür alle übrigen Tags (MIFARE, ISO15693, FeliCa, sonstige
+///   ISO7816) – ohne EU-Beschränkung und ohne iOS-26-Zwang.
+///
+/// Der zweite Modus existiert, weil Karten, die ohnehin im Portemonnaie liegen
+/// – Firmenausweis, Fitnessstudio, Bibliothek, Kundenkarte – in aller Regel
+/// eine feste UID haben. Sie sind gebaut, um wiedererkannt zu werden, während
+/// Zahlkarten aus Datenschutzgründen genau das vermeiden.
+enum SessionMode: String, CaseIterable, Sendable {
+    case payment
+    case anyTag
+
+    var label: String {
+        switch self {
+        case .payment: return "Zahlkarte"
+        case .anyTag: return "Andere Karte"
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .payment:
+            return "NFCPaymentTagReaderSession – nur Zahlkarten, iOS 26+, nur EU."
+        case .anyTag:
+            return "NFCTagReaderSession – alles außer Zahlkarten, keine EU-Beschränkung."
+        }
+    }
+}
+
 // MARK: - Scan purpose
 
 /// Warum gerade gescannt wird. Bestimmt den Prompt und was mit dem Ergebnis passiert.
@@ -36,7 +73,11 @@ struct CardScan: Identifiable, Sendable {
     /// SHA-256 des Identifiers, hex-codiert.
     let identifierHash: String
     /// Der von der Session automatisch selektierte AID, z.B. "A0000000031010".
+    /// Bei Nicht-ISO7816-Tags leer.
     let selectedAID: String
+    /// Technischer Tag-Typ, z.B. "ISO7816" oder "MIFARE" – hilft einzuordnen,
+    /// warum eine Karte sich stabil oder instabil verhält.
+    let tagKind: String
     /// Byte-Länge des Identifiers. 4 Byte deutet auf ISO14443-A single size hin.
     let identifierByteCount: Int
     /// Heuristik: sieht der Identifier nach einer zufällig erzeugten UID aus?

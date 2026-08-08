@@ -16,6 +16,7 @@ struct DebugNFCTestView: View {
     @State private var scans: [CardScan] = []
     @State private var cardLabel = "Karte A"
     @State private var statusMessage: String?
+    @State private var mode: SessionMode = .payment
 
     /// Läuft gerade die geführte 10er-Messreihe?
     @State private var stabilityRunActive = false
@@ -28,6 +29,7 @@ struct DebugNFCTestView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     availabilityBox
+                    modePicker
                     labelField
                     actionButtons
 
@@ -76,6 +78,31 @@ struct DebugNFCTestView: View {
         }
         .font(.caption.monospaced())
         .foregroundStyle(.secondary)
+    }
+
+    private var modePicker: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Picker("Session", selection: $mode) {
+                ForEach(SessionMode.allCases, id: \.self) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(stabilityRunActive)
+
+            Text(mode.explanation)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            if mode == .anyTag {
+                Text("Für Karten, die ohnehin im Portemonnaie liegen – "
+                     + "Firmenausweis, Fitnessstudio, Bibliothek, Kundenkarte. "
+                     + "Solche Karten sollen wiedererkannt werden und haben "
+                     + "deshalb meist eine feste UID.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     private var labelField: some View {
@@ -192,6 +219,7 @@ struct DebugNFCTestView: View {
                     Text("Scan #\(scan.index) – \(scan.cardLabel)")
                         .font(.caption.weight(.semibold))
                     Text("Hash-Präfix: \(scan.hashPrefix)")
+                    Text("Typ: \(scan.tagKind)")
                     Text("AID: \(scan.selectedAID.isEmpty ? "–" : scan.selectedAID)")
                     Text("Identifier: \(scan.identifierByteCount) Byte"
                          + (scan.looksRandomized ? " (sieht zufällig aus)" : ""))
@@ -233,7 +261,7 @@ struct DebugNFCTestView: View {
     }
 
     private func performScan() {
-        nfc.scan(purpose: .test) { result in
+        nfc.scan(purpose: .test, mode: mode) { result in
             switch result {
             case .success(let outcome):
                 let scan = CardScan(
@@ -241,6 +269,7 @@ struct DebugNFCTestView: View {
                     timestamp: Date(),
                     identifierHash: outcome.identifierHash,
                     selectedAID: outcome.selectedAID,
+                    tagKind: outcome.tagKind,
                     identifierByteCount: outcome.identifierByteCount,
                     looksRandomized: outcome.looksRandomized,
                     matchesRegisteredCard: cards.isRegistered

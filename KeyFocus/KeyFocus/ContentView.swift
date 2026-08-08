@@ -9,6 +9,7 @@ struct ContentView: View {
 
     @State private var showingPicker = false
     @State private var showingTestLab = false
+    @State private var registrationMode: SessionMode = .payment
     @State private var statusMessage: String?
     @State private var statusIsError = false
 
@@ -74,12 +75,25 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                Picker("Kartenart", selection: $registrationMode) {
+                    ForEach(SessionMode.allCases, id: \.self) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(registrationMode.explanation)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
                 Button("Karte registrieren") { registerCard() }
                     .buttonStyle(.bordered)
                     .disabled(nfc.isScanning)
 
-                Text(cards.isRegistered ? "Karte registriert ✓" : "Keine Karte registriert")
+                Text(cards.isRegistered
+                     ? "Karte registriert ✓ (\(cards.registeredMode.label))"
+                     : "Keine Karte registriert")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -191,8 +205,14 @@ struct ContentView: View {
     private var paymentAvailabilityNotice: some View {
         if !NFCManager.deviceSupportsNFC {
             noticeBox(ScanFailure.nfcUnsupportedOnDevice.message)
-        } else if !NFCManager.paymentReadingAvailable {
-            noticeBox(ScanFailure.paymentSessionUnavailable.message)
+        } else if registrationMode == .payment, !NFCManager.paymentReadingAvailable {
+            // Betrifft nur den Zahlkarten-Modus – „Andere Karte" läuft über die
+            // normale Session und ist von der EU-Beschränkung nicht betroffen.
+            noticeBox(
+                ScanFailure.paymentSessionUnavailable.message
+                + "\n\nTipp: Mit „Andere Karte" funktioniert jede andere "
+                + "NFC-Karte ohne diese Einschränkung."
+            )
         }
     }
 
@@ -237,11 +257,11 @@ struct ContentView: View {
     // MARK: - Aktionen
 
     private func registerCard() {
-        nfc.scan(purpose: .registration) { result in
+        nfc.scan(purpose: .registration, mode: registrationMode) { result in
             switch result {
             case .success(let outcome):
-                if cards.register(hash: outcome.identifierHash) {
-                    show("Karte registriert ✓", isError: false)
+                if cards.register(hash: outcome.identifierHash, mode: registrationMode) {
+                    show("Karte registriert ✓ (\(outcome.tagKind))", isError: false)
                 } else {
                     show("Karte konnte nicht gespeichert werden (Keychain).", isError: true)
                 }
@@ -252,7 +272,9 @@ struct ContentView: View {
     }
 
     private func unlockWithCard() {
-        nfc.scan(purpose: .unlock) { result in
+        // Zwingend derselbe Session-Typ wie bei der Registrierung – sonst wird
+        // die Karte gar nicht erst erkannt.
+        nfc.scan(purpose: .unlock, mode: cards.registeredMode) { result in
             switch result {
             case .success(let outcome):
                 if cards.matches(hash: outcome.identifierHash) {

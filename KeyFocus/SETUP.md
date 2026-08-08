@@ -188,6 +188,13 @@ mindestens zwei verschiedene kontaktlose Karten.
 
 Ergebnis notieren – **das ist das Resultat, um das es hier eigentlich geht.**
 
+**Falls die Bankkarte durchfällt**, im Test Lab auf „Andere Karte" umschalten
+und die übrigen NFC-Karten aus dem Portemonnaie durchmessen (Firmenausweis,
+Fitnessstudio, Bibliothek, Kundenkarte). Diese Session unterliegt weder der
+EU-Beschränkung noch iOS 26, und solche Karten haben meist eine feste UID.
+Der Scan-Verlauf zeigt je Eintrag den Tag-Typ, damit sich einordnen lässt,
+womit man es zu tun hat.
+
 ---
 
 ## 6. Was einer App-Store-App im Weg steht
@@ -248,11 +255,34 @@ was keine Dokumentation beantworten kann.
 
 **Wenn das Ergebnis negativ ausfällt**, ist die Idee nicht tot – nur der
 Träger. Der Rest der App (Screen-Time-Shields, Besitzfaktor zum Entsperren)
-bleibt gültig. Was sich ändert, ist das physische Objekt: NFC-Tags oder
--Sticker mit fester UID kosten wenige Cent, funktionieren mit der normalen
-`NFCTagReaderSession` ohne EU-Beschränkung und ohne iOS-26-Zwang, und man kann
-sie dorthin kleben, wo die Hürde wirken soll. Der Charme der Bankkarte war, dass
-man sie ohnehin dabeihat – das wäre der Verlust, und er wäre zu verschmerzen.
+bleibt unverändert gültig.
+
+Und der Ausweg muss kein Sticker sein: In fast jedem Portemonnaie liegen
+bereits andere NFC-Karten – Firmenausweis, Fitnessstudio, Bibliothek,
+Kundenkarte, Hotelkarte. Das sind meist MIFARE-Karten, und die haben in aller
+Regel eine **feste UID**, weil ihr ganzer Zweck das Wiedererkennen ist. Genau
+umgekehrt zur Zahlkarte, die Wiedererkennung bewusst verhindert.
+
+Deshalb kann die App beides. Über den Umschalter **Zahlkarte / Andere Karte**
+(im Setup und im Test Lab):
+
+| | Zahlkarte | Andere Karte |
+|---|---|---|
+| Session | `NFCPaymentTagReaderSession` | `NFCTagReaderSession` |
+| Erfasst | nur Zahlkarten | MIFARE, ISO15693, FeliCa, sonstige ISO7816 |
+| iOS 26+ nötig | ja | nein |
+| EU-Beschränkung | ja | **nein** |
+| UID meist stabil | eher nicht | in der Regel ja |
+
+Der bei der Registrierung gewählte Modus wird gespeichert und beim Entsperren
+automatisch wiederverwendet – eine Zahlkarte wird von der generischen Session
+nicht erkannt und umgekehrt.
+
+Praktisch heißt das: **erst die Bankkarte messen.** Fällt sie durch, im Test
+Lab auf „Andere Karte" umschalten und durchprobieren, was ohnehin im
+Portemonnaie liegt. Der Charme, nichts Zusätzliches mitschleppen zu müssen,
+bleibt so erhalten – nur eben mit einer anderen Karte aus demselben
+Portemonnaie.
 
 ---
 

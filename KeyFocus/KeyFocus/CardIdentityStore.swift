@@ -27,8 +27,19 @@ final class CardIdentityStore {
 
     private(set) var registeredHash: String?
 
+    /// Mit welchem Session-Typ die Karte registriert wurde. Das Entsperren muss
+    /// denselben Typ verwenden – eine Zahlkarte wird von der generischen Session
+    /// nicht erkannt und umgekehrt.
+    private(set) var registeredMode: SessionMode = .payment
+
+    private static let modeKey = "de.keyfocus.registeredMode"
+
     init() {
         registeredHash = Self.loadHash()
+        if let raw = UserDefaults.standard.string(forKey: Self.modeKey),
+           let mode = SessionMode(rawValue: raw) {
+            registeredMode = mode
+        }
     }
 
     var isRegistered: Bool { registeredHash != nil }
@@ -53,10 +64,12 @@ final class CardIdentityStore {
 
     /// Registriert eine Karte. Erwartet den bereits gebildeten Hash, damit der
     /// rohe Identifier gar nicht erst bis hierher wandert.
-    func register(hash: String) -> Bool {
+    func register(hash: String, mode: SessionMode) -> Bool {
         guard let data = hash.data(using: .utf8) else { return false }
         guard KeychainStore.save(data, for: .registeredCardHash) else { return false }
         registeredHash = hash
+        registeredMode = mode
+        UserDefaults.standard.set(mode.rawValue, forKey: Self.modeKey)
         return true
     }
 

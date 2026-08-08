@@ -24,6 +24,7 @@ final class NFCManager: NSObject {
         let selectedAID: String
         let identifierByteCount: Int
         let looksRandomized: Bool
+        let tagKind: String
     }
 
     private(set) var isScanning = false
@@ -46,8 +47,12 @@ final class NFCManager: NSObject {
     }
 
     /// Startet einen Scan. Das Ergebnis kommt über `completion` auf dem MainActor.
+    ///
+    /// - Parameter mode: `.payment` für Zahlkarten (EU, iOS 26+), `.anyTag` für
+    ///   alle übrigen Karten ohne diese Einschränkungen.
     func scan(
         purpose: ScanPurpose,
+        mode: SessionMode = .payment,
         completion: @escaping (Result<ScanOutcome, ScanFailure>) -> Void
     ) {
         guard !isScanning else { return }
@@ -56,16 +61,36 @@ final class NFCManager: NSObject {
             fail(.nfcUnsupportedOnDevice, completion: completion)
             return
         }
-        guard Self.paymentReadingAvailable else {
-            fail(.paymentSessionUnavailable, completion: completion)
-            return
+
+        let newSession: NFCTagReaderSession
+
+        switch mode {
+        case .payment:
+            guard Self.paymentReadingAvailable else {
+                fail(.paymentSessionUnavailable, completion: completion)
+                return
+            }
+            // Apples ObjC-Header deklariert `- (instancetype)initWithDelegate:queue:`
+            // ohne `nullable`, der Initializer wird also NICHT optional nach Swift
+            // importiert (anders als bei NFCTagReaderSession, wo er `init?` ist).
+            // Sollte dein SDK ihn doch als failable importieren, ist hier ein
+            // `guard let` nötig – das ist die einzige betroffene Zeile.
+            newSession = NFCPaymentTagReaderSession(delegate: self, queue: nil)
+
+        case .anyTag:
+            // Alle gängigen Polling-Verfahren, damit möglichst jede Karte aus
+            // dem Portemonnaie erfasst wird. Zahlkarten liefert diese Session
+            // bewusst nicht – dafür gibt es .payment.
+            guard let generic = NFCTagReaderSession(
+                pollingOption: [.iso14443, .iso15693, .iso18092],
+                delegate: self,
+                queue: nil
+            ) else {
+                fail(.nfcUnsupportedOnDevice, completion: completion)
+                return
+            }
+            newSession = generic
         }
-        // Apples ObjC-Header deklariert `- (instancetype)initWithDelegate:queue:`
-        // ohne `nullable`, der Initializer wird also NICHT optional nach Swift
-        // importiert (anders als bei NFCTagReaderSession, wo er `init?` ist).
-        // Sollte dein SDK ihn doch als failable importieren, ist hier ein
-        // `guard let` nötig – das ist die einzige betroffene Zeile.
-        let newSession = NFCPaymentTagReaderSession(delegate: self, queue: nil)
 
         self.completion = completion
         self.lastFailure = nil
@@ -135,14 +160,35 @@ extension NFCManager: NFCTagReaderSessionDelegate {
             session.invalidate(errorMessage: ScanFailure.multipleTagsDetected.message)
             return
         }
-        guard case .iso7816(let tag) = tags[0] else {
+        // Nur Identifier und ggf. AID werden gelesen. Kein connect, kein APDU.
+        let identifier: Data
+        let aid: String
+        let kind: String
+
+        switch tags[0] {
+        case .iso7816(let tag):
+            identifier = tag.identifier
+            aid = tag.initialSelectedAID
+            kind = "ISO7816"
+        case .miFare(let tag):
+            // Typischer Fall für Firmenausweise, Fitnessstudio- und
+            // Bibliothekskarten – hier ist die UID normalerweise fest.
+            identifier = tag.identifier
+            aid = ""
+            kind = "MIFARE"
+        case .iso15693(let tag):
+            identifier = tag.identifier
+            aid = ""
+            kind = "ISO15693"
+        case .feliCa(let tag):
+            // FeliCa hat keine UID im ISO14443-Sinn; das IDm übernimmt die Rolle.
+            identifier = tag.currentIDm
+            aid = ""
+            kind = "FeliCa"
+        @unknown default:
             session.invalidate(errorMessage: ScanFailure.unsupportedTagType.message)
             return
         }
-
-        // Nur diese beiden Werte werden gelesen. Kein connect, kein APDU.
-        let identifier = tag.identifier
-        let aid = tag.initialSelectedAID
 
         guard !identifier.isEmpty else {
             session.invalidate(errorMessage: ScanFailure.cardRemovedTooQuickly.message)
@@ -154,7 +200,8 @@ extension NFCManager: NFCTagReaderSessionDelegate {
             identifierHash: CardIdentityStore.hash(identifier: identifier),
             selectedAID: aid,
             identifierByteCount: identifier.count,
-            looksRandomized: IdentifierHeuristics.looksRandomized(identifier)
+            looksRandomized: IdentifierHeuristics.looksRandomized(identifier),
+            tagKind: kind
         )
 
         session.alertMessage = "Karte gelesen ✓"
