@@ -63,7 +63,9 @@ Das ist in `CombinedEstimator.estimateReels(...)` in
 ### Ehrliche Grenzen des Netzwerk-Pfads
 
 - **Es bleibt eine Schätzung.** Wir lesen keine dokumentierte API aus, sondern
-  beobachtete Muster. `burstsPerReel` ist ein Kalibrierwert, kein Naturgesetz.
+  beobachtete Muster. `burstsPerReel` ist ein Kalibrierwert, kein Naturgesetz –
+  wie man ihn aus echten Messungen bestimmt, steht in
+  [`../tools/README.md`](../tools/README.md).
 - **Der Traffic ist verschlüsselt** (TLS/QUIC). Sichtbar sind nur Metadaten:
   Ziel-IP, Zeitpunkt, Paketgröße – kein Videoinhalt. Das ist für den
   Datenschutz gut und für die Genauigkeit die Einschränkung.
@@ -144,5 +146,7 @@ Freigaben an (Family Controls / VPN-Profil / Bedienungshilfen).
    das ist der kritische Aufwandstreiber, hier zuerst einen Spike bauen.
 4. `burstsPerReel`, `minBurstBytes` und `burstIdleGap` gegen echte Messungen
    kalibrieren: Reels manuell zählen, mit den Tunnel-Zahlen abgleichen.
+   Werkzeug und Vorgehen dafür liegen in [`../tools/`](../tools/) –
+   `calibrate.py` fittet die Parameter und gibt den fertigen Swift-Block aus.
 5. Android-Projekt mit Glance-Widget + Accessibility-Service anlegen,
    Entscheidung Play Store vs. Sideload treffen.

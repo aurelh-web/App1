@@ -1,0 +1,9 @@
+# Generierte Messdaten (~7 MB, per tools/make_sample_data.py reproduzierbar)
+tools/sample-measurements.json
+
+# Echte Messungen bleiben lokal
+tools/measurements-*.json
+
+__pycache__/
+*.pyc
+.DS_Store

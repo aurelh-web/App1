@@ -62,6 +62,8 @@ native/README.md                Trade-off-Übersicht der nativen Datenpfade
 native/ios/*.swift              WidgetKit + Netzwerk-Traffic + Screen-Time
                                 + ReplayKit Skizzen
 native/android/*.kt             AccessibilityService + Glance-Widget Skizzen
+tools/calibrate.py              Eicht die Heuristik gegen echte Messungen
+tools/README.md                 Messvorgehen und Eingabeformat
 ```
 
 ## Browser-Prototyp starten
@@ -101,6 +103,22 @@ echte native App investiert.
   geeicht werden – Reels manuell zählen und mit den Tunnel-Zahlen abgleichen.
 - Diese Vereinfachungen sind bewusst grob gehalten und sollten in einer
   echten App durch Kalibrierung/Nutzerfeedback verfeinert werden.
+
+## Kalibrierung
+
+Die Schätzwerte oben sind geraten, solange sie nicht gegen echte Messungen
+geeicht wurden. Dafür liegt in [`tools/`](tools/) ein Auswertungsskript bereit.
+Ohne iPhone ausprobieren:
+
+```bash
+python3 tools/make_sample_data.py > tools/sample-measurements.json
+python3 tools/calibrate.py tools/sample-measurements.json
+```
+
+Das rechnet auf synthetischen Daten mit bekannter Wahrheit und zeigt, wie der
+Report aussieht. Für die echte Eichung: Reels beim Schauen von Hand mitzählen,
+Tunnel-Log dazulegen, Skript laufen lassen – es gibt den fertigen Swift-Block
+zum Einfügen aus. Details in [`tools/README.md`](tools/README.md).
 
 ## Nächste Schritte für eine echte App
 
