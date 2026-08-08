@@ -65,6 +65,7 @@
       <button id="clear" class="secondary">Leeren</button>
     </div>
     <p class="hint" id="status"></p>
+    <div id="nothingHint"></div>
   </div>
 
   <div id="verdict"></div>
@@ -76,6 +77,58 @@
 const scans = [];
 let reader = null;
 let abort = null;
+let silenceTimer = null;
+
+// Wie lange ohne jedes Leseereignis, bevor die Seite erklärt, dass das an
+// Web NFC liegen kann und nicht an der Karte.
+const SILENCE_MS = 15000;
+
+function armSilenceHint() {
+  clearTimeout(silenceTimer);
+  document.getElementById("nothingHint").innerHTML = "";
+  silenceTimer = setTimeout(() => {
+    document.getElementById("nothingHint").innerHTML = `<div class="box warn">
+      <p class="hint" style="margin-top:0"><strong>Seit 15 Sekunden nichts
+      erkannt?</strong></p>
+      <p class="hint">Dann liest Web NFC diese Karte vermutlich gar nicht.
+      <strong>Das sagt nichts über ihre UID-Stabilität aus</strong> – zieh
+      daraus also keinen Schluss über die Karte.</p>
+      <p class="hint">Grund: Web NFC ist auf NDEF-Tags ausgelegt. Zahlkarten
+      sind keine, und auch manche Ausweis- und Kundenkarten nicht.</p>
+      <p class="hint"><strong>Ausweg:</strong> Eine NFC-Reader-App wie
+      „NFC Tools" aus dem Play Store zeigt die UID auch bei Karten an, die
+      hier stumm bleiben. Karte zehnmal auflegen und schauen, ob sich die UID
+      ändert – das beantwortet dieselbe Frage.</p>
+      <p class="hint">Vorher noch prüfen: Karte mittig an die Rückseite des
+      Handys, NFC in den Android-Einstellungen aktiviert.</p>
+    </div>`;
+  }, SILENCE_MS);
+}
+
+function clearSilenceHint() {
+  clearTimeout(silenceTimer);
+  document.getElementById("nothingHint").innerHTML = "";
+}
+
+/// Ergebnis als Text zum Weiterschicken.
+function resultsAsText() {
+  const labels = [...new Set(scans.map(s => s.label))];
+  const lines = ["CardProbe Web – Messergebnis", ""];
+  for (const l of labels) {
+    const group = scans.filter(s => s.label === l);
+    const distinct = new Set(group.map(s => s.hash)).size;
+    const anyRandom = group.some(s => s.randomLooking);
+    const verdict = group.length < 2 ? "ZU WENIG DATEN"
+      : distinct === 1 ? "STABIL" : "INSTABIL";
+    lines.push(`${l}: ${group.length} Scans, ${distinct} verschiedene UIDs`
+      + ` -> ${verdict}`
+      + (anyRandom ? " (sah nach Zufalls-UID aus)" : ""));
+    group.forEach(s => lines.push(
+      `   #${s.index} ${s.hash.slice(0, 8).toUpperCase()} · ${s.byteCount} Byte`));
+  }
+  lines.push("", `User-Agent: ${navigator.userAgent}`);
+  return lines.join("\n");
+}
 
 // ---------------------------------------------------------------- Support
 
@@ -148,6 +201,7 @@ async function startScan() {
 
     reader.onreading = async (event) => {
       // serialNumber ist die UID aus der ISO14443-Antikollision.
+      clearSilenceHint();
       const serial = event.serialNumber || "";
       if (!serial) {
         status.textContent = "Tag gelesen, aber ohne Seriennummer – "
@@ -175,6 +229,7 @@ async function startScan() {
     status.textContent = "Bereit – Karte an die Rückseite des Handys halten.";
     document.getElementById("scan").disabled = true;
     document.getElementById("stop").disabled = false;
+    armSilenceHint();
   } catch (error) {
     status.textContent = error.name === "NotAllowedError"
       ? "NFC-Zugriff abgelehnt. Seite neu laden und erlauben."
@@ -185,6 +240,7 @@ async function startScan() {
 function stopScan() {
   if (abort) abort.abort();
   abort = null;
+  clearSilenceHint();
   document.getElementById("scan").disabled = false;
   document.getElementById("stop").disabled = true;
   document.getElementById("status").textContent = "Gestoppt.";
@@ -205,13 +261,17 @@ function render() {
     mine.forEach(s => counts[s.hash] = (counts[s.hash] || 0) + 1);
     const distinct = Object.keys(counts).length;
     const largest = Math.max(...Object.values(counts));
-    const stable = distinct === 1;
+    // Ein einzelner Scan ist immer "mit sich selbst identisch" und belegt
+    // deshalb gar nichts. Erst ab zwei Scans gibt es ein Urteil.
+    const inconclusive = mine.length < 2;
+    const stable = !inconclusive && distinct === 1;
     const anyRandom = mine.some(s => s.randomLooking);
 
     v.innerHTML = `<div class="box">
       <p class="mono" style="color:var(--dim)">${label}: ${mine.length} Scans</p>
-      <p class="verdict ${stable ? "ok" : "bad"}">
-        ${stable ? "UID STABIL" : "UID INSTABIL"}</p>
+      <p class="verdict ${inconclusive ? "" : stable ? "ok" : "bad"}"
+         ${inconclusive ? 'style="color:var(--dim)"' : ""}>
+        ${inconclusive ? "ZU WENIG DATEN" : stable ? "UID STABIL" : "UID INSTABIL"}</p>
       <p class="mono">${largest} / ${mine.length} Identifier identisch</p>
       ${mine.length < 10 ? `<p class="hint">Für ein belastbares Urteil auf 10
         Scans kommen (${10 - mine.length} fehlen).</p>` : ""}
@@ -262,8 +322,27 @@ function render() {
         `<div class="scan mono">#${s.index} ${s.label} ·
           ${s.hash.slice(0, 8).toUpperCase()} · ${s.byteCount} Byte${
           s.randomLooking ? " · sieht zufällig aus" : ""}</div>`).join("")
-      + `</div>`
+      + `<button id="copy" class="secondary">Ergebnis kopieren</button>
+         <p class="hint" id="copyStatus"></p></div>`
     : "";
+
+  const copy = document.getElementById("copy");
+  if (copy) copy.onclick = async () => {
+    const text = resultsAsText();
+    const done = (msg) => document.getElementById("copyStatus").textContent = msg;
+    try {
+      await navigator.clipboard.writeText(text);
+      done("In die Zwischenablage kopiert.");
+    } catch {
+      // Ohne Clipboard-Freigabe: Text zum Markieren anzeigen.
+      done("Kopieren nicht erlaubt – Text unten markieren:");
+      const pre = document.createElement("pre");
+      pre.className = "mono";
+      pre.style.cssText = "white-space:pre-wrap;user-select:all;margin-top:8px";
+      pre.textContent = text;
+      document.getElementById("copyStatus").after(pre);
+    }
+  };
 }
 
 // ---------------------------------------------------------------- Wiring

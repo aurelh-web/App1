@@ -103,12 +103,20 @@ struct StabilityReport: Sendable {
     let distinctIdentifiers: Int
     let anyLookedRandomized: Bool
 
+    /// Mindestens zwei Scans nötig: Ein einzelner Wert kann nichts über
+    /// Stabilität aussagen – er ist immer „mit sich selbst identisch".
     var isStable: Bool {
-        totalScans > 0 && distinctIdentifiers == 1
+        totalScans >= 2 && distinctIdentifiers == 1
+    }
+
+    /// Zu wenig Daten für ein Urteil.
+    var isInconclusive: Bool {
+        totalScans < 2
     }
 
     var headline: String {
-        isStable ? "IDENTIFIER STABIL" : "IDENTIFIER INSTABIL"
+        if isInconclusive { return "ZU WENIG DATEN" }
+        return isStable ? "IDENTIFIER STABIL" : "IDENTIFIER INSTABIL"
     }
 
     var detail: String {

@@ -158,7 +158,12 @@ struct DebugNFCTestView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(report.headline)
                 .font(.headline)
-                .foregroundStyle(report.isStable ? .green : .red)
+                // Bei zu wenig Daten weder grün noch rot – das Ergebnis ist
+                // an dieser Stelle schlicht noch keins.
+                .foregroundStyle(
+                    report.isInconclusive ? Color.secondary
+                        : (report.isStable ? Color.green : Color.red)
+                )
             Text(report.detail)
                 .font(.body.monospaced())
             Text("Verschiedene Identifier: \(report.distinctIdentifiers)")
@@ -172,7 +177,7 @@ struct DebugNFCTestView: View {
                     .foregroundStyle(.orange)
             }
 
-            if !report.isStable {
+            if !report.isStable && !report.isInconclusive {
                 Text("Damit taugt diese Karte nicht als dauerhafter Schlüssel: "
                      + "Der Identifier ändert sich zwischen den Scans, ein "
                      + "gespeicherter Hash kann also nicht wiedererkannt werden.")

@@ -107,7 +107,11 @@ struct ProbeView: View {
 
                 Text(report.headline)
                     .font(.title3.weight(.bold))
-                    .foregroundStyle(report.isStable ? Color.green : Color.red)
+                    // Bei zu wenig Daten weder grün noch rot.
+                    .foregroundStyle(
+                        report.isInconclusive ? Color.secondary
+                            : (report.isStable ? Color.green : Color.red)
+                    )
 
                 Text(report.detail)
                     .font(.body.monospaced())
