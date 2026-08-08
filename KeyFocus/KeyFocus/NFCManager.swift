@@ -34,7 +34,10 @@ final class NFCManager: NSObject {
     private var completion: ((Result<ScanOutcome, ScanFailure>) -> Void)?
 
     /// Grundsätzliche NFC-Fähigkeit des Geräts.
-    static var deviceSupportsNFC: Bool {
+    ///
+    /// `nonisolated`, weil das auch aus den Delegate-Callbacks heraus gebraucht
+    /// wird, die auf der Session-Queue laufen.
+    nonisolated static var deviceSupportsNFC: Bool {
         NFCTagReaderSession.readingAvailable
     }
 
@@ -46,7 +49,7 @@ final class NFCManager: NSObject {
     /// niedrigerem Deployment-Target zu übersetzen (CardProbe zielt auf iOS 17,
     /// damit die Messung auf mehr Geräten läuft). Der `.anyTag`-Modus ist von
     /// iOS 26 ohnehin nicht abhängig.
-    static var paymentReadingAvailable: Bool {
+    nonisolated static var paymentReadingAvailable: Bool {
         if #available(iOS 26.0, *) {
             return NFCPaymentTagReaderSession.readingAvailable
         }
@@ -78,11 +81,22 @@ final class NFCManager: NSObject {
                 return
             }
             // Apples ObjC-Header deklariert `- (instancetype)initWithDelegate:queue:`
-            // ohne `nullable`, der Initializer wird also NICHT optional nach Swift
-            // importiert (anders als bei NFCTagReaderSession, wo er `init?` ist).
-            // Sollte dein SDK ihn doch als failable importieren, ist hier ein
-            // `guard let` nötig – das ist die einzige betroffene Zeile.
-            newSession = NFCPaymentTagReaderSession(delegate: self, queue: nil)
+            // ohne `nullable`; der Initializer sollte also NICHT optional nach
+            // Swift importiert werden – anders als bei NFCTagReaderSession, wo
+            // er `init?` ist.
+            //
+            // Der Umweg über eine explizit als optional typisierte Variable
+            // macht die Frage gegenstandslos: Ein nicht-optionales Ergebnis
+            // wird implizit hochkonvertiert, ein optionales passt direkt.
+            // Damit übersetzt der Code in beiden Fällen, ohne dass man wissen
+            // muss, wie das SDK ihn importiert.
+            let candidate: NFCTagReaderSession? =
+                NFCPaymentTagReaderSession(delegate: self, queue: nil)
+            guard let paymentSession = candidate else {
+                fail(.paymentSessionUnavailable, completion: completion)
+                return
+            }
+            newSession = paymentSession
 
         case .anyTag:
             // Alle gängigen Polling-Verfahren, damit möglichst jede Karte aus
@@ -149,7 +163,7 @@ extension NFCManager: NFCTagReaderSessionDelegate {
         _ session: NFCTagReaderSession,
         didInvalidateWithError error: Error
     ) {
-        let failure = Self.mapInvalidation(error)
+        let failure = Self.mapInvalidation(error, session: session)
         Task { @MainActor [weak self] in
             guard let self else { return }
             // Ein sauber abgeschlossener Scan hat den Handler schon konsumiert;
@@ -220,23 +234,12 @@ extension NFCManager: NFCTagReaderSessionDelegate {
     }
 
     /// Übersetzt Core-NFC-Fehler in lesbare Zustände.
-    private static func mapInvalidation(_ error: Error) -> ScanFailure {
+    private nonisolated static func mapInvalidation(
+        _ error: Error,
+        session: NFCTagReaderSession
+    ) -> ScanFailure {
         guard let readerError = error as? NFCReaderError else {
             return .readFailed(error.localizedDescription)
-        }
-
-        // Neu in iOS 26 (ObjC: NFCReaderErrorIneligible): Gerät oder Account
-        // sind nicht für das Lesen von Zahlkarten berechtigt – in der Praxis:
-        // außerhalb der EU.
-        //
-        // Steht bewusst VOR dem Switch: Der Enum-Fall ist selbst als iOS 26+
-        // markiert und ließe sich in einem Target mit niedrigerem
-        // Deployment-Target sonst gar nicht erst übersetzen.
-        //
-        // Sollte dieses Symbol in deinem SDK anders heißen, ist das die
-        // einzige anzupassende Stelle.
-        if #available(iOS 26.0, *), readerError.code == .readerErrorIneligible {
-            return .ineligibleRegionOrAccount
         }
 
         switch readerError.code {
@@ -250,7 +253,28 @@ extension NFCManager: NFCTagReaderSessionDelegate {
             return .cardRemovedTooQuickly
         case .readerErrorUnsupportedFeature, .readerErrorSecurityViolation:
             return .paymentSessionUnavailable
+
         default:
+            // iOS 26 kennt hier zusätzlich NFCReaderErrorIneligible – Gerät
+            // oder Account sind nicht für das Lesen von Zahlkarten berechtigt,
+            // in der Praxis: außerhalb der EU.
+            //
+            // Der Enum-Fall wird bewusst NICHT benannt: Er ist als iOS 26+
+            // markiert und würde ein Target mit niedrigerem Deployment-Target
+            // gar nicht erst übersetzen; zudem müsste man den exakten
+            // Swift-Namen kennen. Stattdessen wird der Zustand geprüft, den
+            // der Fehler beschreibt.
+            //
+            // Die Einschränkung auf Payment-Sessions ist wichtig: Bei einer
+            // generischen Session (Modus "Andere Karte") ist
+            // paymentReadingAvailable regelmäßig false, ohne dass das mit dem
+            // Fehler zu tun hätte – ohne diese Prüfung bekäme man dort eine
+            // irreführende EU-Meldung.
+            if #available(iOS 26.0, *),
+               session is NFCPaymentTagReaderSession,
+               !paymentReadingAvailable {
+                return .ineligibleRegionOrAccount
+            }
             return .readFailed(readerError.localizedDescription)
         }
     }

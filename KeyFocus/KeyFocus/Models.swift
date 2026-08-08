@@ -157,8 +157,11 @@ enum ScanFailure: Equatable, Sendable {
                 """
         case .ineligibleRegionOrAccount:
             return """
-                Gerät oder Account sind nicht berechtigt (NFCReaderError.readerErrorIneligible). \
-                Diese API ist auf die EU beschränkt. Siehe SETUP.md.
+                Gerät oder Account sind nicht zum Lesen von Zahlkarten berechtigt. \
+                Diese API ist auf die EU beschränkt: Die Apple-ID muss in der EU \
+                registriert und das Gerät in der EU sein. Siehe SETUP.md.
+
+                Tipp: Der Modus „Andere Karte" unterliegt dieser Einschränkung nicht.
                 """
         case .cancelledByUser:
             return "Scan abgebrochen."
