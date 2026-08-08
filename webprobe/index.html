@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CardProbe Web – UID-Stabilität messen</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔑</text></svg>" />
+<style>
+  :root {
+    --bg: #0d0d10; --panel: #1a1a20; --text: #f0f0f3; --dim: #9a9aa5;
+    --ok: #30d158; --bad: #ff453a; --warn: #ff9f0a; --accent: #5e5ce6;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px 16px 60px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+    max-width: 560px; margin-inline: auto;
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .sub { color: var(--dim); font-size: .9rem; margin: 0 0 20px; }
+  .box { background: var(--panel); border-radius: 12px; padding: 14px; margin-bottom: 16px; }
+  .box.bad { border: 1px solid var(--bad); }
+  .box.warn { border: 1px solid var(--warn); }
+  label { display: block; font-size: .8rem; color: var(--dim); margin-bottom: 4px; }
+  input {
+    width: 100%; padding: 10px; border-radius: 8px; font-size: 1rem;
+    background: #26262e; color: var(--text); border: 1px solid #35353f;
+  }
+  button {
+    width: 100%; padding: 14px; border: none; border-radius: 10px;
+    background: var(--accent); color: #fff; font-size: 1rem; font-weight: 600;
+    cursor: pointer; margin-top: 10px;
+  }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.secondary { background: #2c2c35; }
+  .verdict { font-size: 1.3rem; font-weight: 700; }
+  .verdict.ok { color: var(--ok); }
+  .verdict.bad { color: var(--bad); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; }
+  .scan { background: #26262e; border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; }
+  .hint { font-size: .78rem; color: var(--dim); margin-top: 6px; line-height: 1.45; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  code { background: #26262e; padding: 1px 5px; border-radius: 4px; font-size: .85em; }
+</style>
+</head>
+<body>
+
+<h1>🔑 CardProbe Web</h1>
+<p class="sub">Misst, ob eine Karte bei jedem Tap dieselbe UID sendet.</p>
+
+<div id="support"></div>
+
+<div id="app" hidden>
+  <div class="box">
+    <label for="label">Karten-Label</label>
+    <input id="label" value="Karte A" />
+    <p class="hint">Beim Wechsel auf eine andere physische Karte umbenennen.
+      Das Urteil bezieht sich immer auf das aktuelle Label.</p>
+    <button id="scan">Scannen starten</button>
+    <div class="row">
+      <button id="stop" class="secondary" disabled>Stoppen</button>
+      <button id="clear" class="secondary">Leeren</button>
+    </div>
+    <p class="hint" id="status"></p>
+  </div>
+
+  <div id="verdict"></div>
+  <div id="compare"></div>
+  <div id="history"></div>
+</div>
+
+<script>
+const scans = [];
+let reader = null;
+let abort = null;
+
+// ---------------------------------------------------------------- Support
+
+function checkSupport() {
+  const el = document.getElementById("support");
+  const isAppleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+  if ("NDEFReader" in window) {
+    document.getElementById("app").hidden = false;
+    el.innerHTML = `<div class="box"><p class="hint">
+      Web NFC verfügbar. Wichtig: Diese API liefert nur die
+      <strong>Seriennummer</strong> des Tags – keine Zahlungsdaten, keine
+      Karteninhalte. Genau die brauchen wir.</p></div>`;
+    return true;
+  }
+
+  if (isAppleMobile) {
+    el.innerHTML = `<div class="box bad">
+      <p class="verdict bad">Auf dem iPhone nicht möglich</p>
+      <p class="hint">Safari unterstützt die Web-NFC-API nicht – und auf iOS
+      läuft jeder Browser zwangsweise auf WebKit, auch Chrome und Firefox.
+      Aus einer Webseite heraus gibt es auf dem iPhone keinen NFC-Zugriff.
+      Daran ändert kein Localhost etwas.</p>
+      <p class="hint"><strong>Der Ausweg:</strong> Ob eine Karte ihre UID
+      würfelt, ist eine Eigenschaft des Chips <em>in der Karte</em>, nicht des
+      Lesegeräts. Öffne diese Seite auf einem <strong>Android-Handy mit
+      Chrome</strong> – das Ergebnis gilt genauso für das iPhone.</p>
+      <p class="hint">Für die Zahlkarte selbst brauchst du am Ende trotzdem die
+      native App: Web NFC liest keine EMV-Karten (siehe unten).</p>
+    </div>`;
+    return false;
+  }
+
+  el.innerHTML = `<div class="box bad">
+    <p class="verdict bad">Web NFC nicht verfügbar</p>
+    <p class="hint">Diese Seite braucht <strong>Chrome auf Android</strong>
+    (ab Version 89) und einen sicheren Kontext – also <code>https://</code>
+    oder <code>http://localhost</code>. Auf dem Desktop gibt es kein NFC.</p>
+  </div>`;
+  return false;
+}
+
+// ---------------------------------------------------------------- Helpers
+
+async function sha256Hex(text) {
+  const data = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return [...new Uint8Array(digest)]
+    .map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+/// Nach ISO/IEC 14443-3 kennzeichnet bei einer 4-Byte-UID das erste Byte 0x08
+/// eine zufällig erzeugte UID; 0xF8 ist ebenfalls für nicht-eindeutige IDs
+/// reserviert. Hinweis, kein Beweis – die Messreihe entscheidet.
+function looksRandomized(serial) {
+  const bytes = serial.split(":").filter(Boolean);
+  if (bytes.length !== 4) return false;
+  const first = bytes[0].toLowerCase();
+  return first === "08" || first === "f8";
+}
+
+// ---------------------------------------------------------------- Scanning
+
+async function startScan() {
+  const status = document.getElementById("status");
+  try {
+    reader = new NDEFReader();
+    abort = new AbortController();
+
+    reader.onreading = async (event) => {
+      // serialNumber ist die UID aus der ISO14443-Antikollision.
+      const serial = event.serialNumber || "";
+      if (!serial) {
+        status.textContent = "Tag gelesen, aber ohne Seriennummer – "
+          + "damit lässt sich nichts vergleichen.";
+        render();
+        return;
+      }
+      scans.push({
+        index: scans.length + 1,
+        hash: await sha256Hex(serial),
+        byteCount: serial.split(":").filter(Boolean).length,
+        randomLooking: looksRandomized(serial),
+        label: document.getElementById("label").value.trim() || "ohne Label",
+      });
+      status.textContent = "";
+      render();
+    };
+
+    reader.onreadingerror = () => {
+      status.textContent = "Karte konnte nicht gelesen werden. "
+        + "Nochmal auflegen und ruhig halten.";
+    };
+
+    await reader.scan({ signal: abort.signal });
+    status.textContent = "Bereit – Karte an die Rückseite des Handys halten.";
+    document.getElementById("scan").disabled = true;
+    document.getElementById("stop").disabled = false;
+  } catch (error) {
+    status.textContent = error.name === "NotAllowedError"
+      ? "NFC-Zugriff abgelehnt. Seite neu laden und erlauben."
+      : "Start fehlgeschlagen: " + error.message;
+  }
+}
+
+function stopScan() {
+  if (abort) abort.abort();
+  abort = null;
+  document.getElementById("scan").disabled = false;
+  document.getElementById("stop").disabled = true;
+  document.getElementById("status").textContent = "Gestoppt.";
+}
+
+// ---------------------------------------------------------------- Rendering
+
+function render() {
+  const label = document.getElementById("label").value.trim() || "ohne Label";
+  const mine = scans.filter(s => s.label === label);
+
+  // Urteil zur aktuellen Karte
+  const v = document.getElementById("verdict");
+  if (!mine.length) {
+    v.innerHTML = "";
+  } else {
+    const counts = {};
+    mine.forEach(s => counts[s.hash] = (counts[s.hash] || 0) + 1);
+    const distinct = Object.keys(counts).length;
+    const largest = Math.max(...Object.values(counts));
+    const stable = distinct === 1;
+    const anyRandom = mine.some(s => s.randomLooking);
+
+    v.innerHTML = `<div class="box">
+      <p class="mono" style="color:var(--dim)">${label}: ${mine.length} Scans</p>
+      <p class="verdict ${stable ? "ok" : "bad"}">
+        ${stable ? "UID STABIL" : "UID INSTABIL"}</p>
+      <p class="mono">${largest} / ${mine.length} Identifier identisch</p>
+      ${mine.length < 10 ? `<p class="hint">Für ein belastbares Urteil auf 10
+        Scans kommen (${10 - mine.length} fehlen).</p>` : ""}
+      ${anyRandom ? `<p class="hint" style="color:var(--warn)">Mindestens eine
+        UID sah nach einer Zufalls-UID aus (4 Byte, beginnt mit 0x08/0xF8 –
+        nach ISO/IEC 14443-3 die Kennzeichnung dafür).</p>` : ""}
+      ${!stable && mine.length >= 2 ? `<p class="hint">Diese Karte taugt nicht
+        als Schlüssel: Ein gespeicherter Hash kann sie nicht wiedererkennen.</p>`
+        : ""}
+    </div>`;
+  }
+
+  // Vergleich mehrerer Karten
+  const c = document.getElementById("compare");
+  const labels = [...new Set(scans.map(s => s.label))];
+  if (labels.length > 1) {
+    const rows = labels.map(l => {
+      const group = scans.filter(s => s.label === l);
+      const distinct = new Set(group.map(s => s.hash)).size;
+      const color = distinct === 1 ? "var(--ok)" : "var(--bad)";
+      return `<p class="mono" style="color:${color}">${l}: ${group.length}
+        Scans, ${distinct} Identifier</p>`;
+    }).join("");
+
+    // Zweite Bedingung: verschiedene Karten muessen sich unterscheiden.
+    const stableOnes = labels
+      .map(l => scans.filter(s => s.label === l))
+      .filter(g => new Set(g.map(s => s.hash)).size === 1);
+    const uniqueHashes = new Set(stableOnes.map(g => g[0].hash)).size;
+    const collision = stableOnes.length > 1 && uniqueHashes < stableOnes.length;
+
+    c.innerHTML = `<div class="box"><p class="hint"
+      style="margin-top:0"><strong>KARTENVERGLEICH</strong></p>${rows}
+      ${stableOnes.length > 1 ? `<p class="hint" style="color:${
+        collision ? "var(--bad)" : "var(--dim)"}">${collision
+        ? "Achtung: Zwei Karten liefern denselben Identifier."
+        : "Verschiedene Karten liefern verschiedene Identifier ✓"}</p>` : ""}
+    </div>`;
+  } else {
+    c.innerHTML = "";
+  }
+
+  // Verlauf
+  const h = document.getElementById("history");
+  h.innerHTML = scans.length
+    ? `<div class="box"><p class="hint" style="margin-top:0">
+        <strong>VERLAUF</strong></p>` + [...scans].reverse().map(s =>
+        `<div class="scan mono">#${s.index} ${s.label} ·
+          ${s.hash.slice(0, 8).toUpperCase()} · ${s.byteCount} Byte${
+          s.randomLooking ? " · sieht zufällig aus" : ""}</div>`).join("")
+      + `</div>`
+    : "";
+}
+
+// ---------------------------------------------------------------- Wiring
+
+if (checkSupport()) {
+  document.getElementById("scan").onclick = startScan;
+  document.getElementById("stop").onclick = stopScan;
+  document.getElementById("clear").onclick = () => {
+    scans.length = 0;
+    document.getElementById("status").textContent = "";
+    render();
+  };
+  document.getElementById("label").oninput = render;
+}
+</script>
+
+</body>
+</html>
