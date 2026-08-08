@@ -1,3 +1,9 @@
+> **Hinweis:** Dieses Repo enthält inzwischen zwei unabhängige Projekte.
+> Neben ReelMeter (unten) liegt in [`KeyFocus/`](KeyFocus/) ein nativer
+> iOS-MVP, der Apps sperrt und nur per physischer Bankkarte wieder freigibt –
+> inklusive [`KeyFocus/SETUP.md`](KeyFocus/SETUP.md) zu Apples EU-Beschränkung
+> und der Frage, ob eine Bankkarte überhaupt als dauerhafter Schlüssel taugt.
+
 # ReelMeter
 
 Konzept + Browser-Prototyp für ein iPhone-Widget (und Android-Pendant), das

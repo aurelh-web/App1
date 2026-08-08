@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Xcode: Capability "Near Field Communication Tag Reading".
+	     "TAG" ist laut Apple-Dokumentation der Wert für NFCTagReaderSession
+	     (und damit auch für deren Unterklasse NFCPaymentTagReaderSession).
+	     Es gibt keinen dokumentierten Extra-Wert für Payment. -->
+	<key>com.apple.developer.nfc.readersession.formats</key>
+	<array>
+		<string>TAG</string>
+	</array>
+
+	<!-- Xcode: Capability "Family Controls".
+	     Für Entwicklung/Debug auf dem eigenen Gerät reicht die Capability.
+	     Für TestFlight/App Store ist eine gesonderte Freigabe durch Apple
+	     nötig – siehe SETUP.md. -->
+	<key>com.apple.developer.family-controls</key>
+	<true/>
+</dict>
+</plist>

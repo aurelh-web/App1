@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>de</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+
+	<!-- Pflicht für jede Core-NFC-Session. Ohne nicht-leeren Text wirft die
+	     Session beim Start einen Fehler. Text erscheint im System-Dialog. -->
+	<key>NFCReaderUsageDescription</key>
+	<string>KeyFocus liest ausschließlich die Kennung deiner Karte, um sie als Schlüssel wiederzuerkennen. Es werden keine Zahlungsdaten gelesen, gespeichert oder übertragen, und es findet keine Zahlung statt.</string>
+
+	<!-- Von NFCPaymentTagReaderSession vorausgesetzt. Die Session führt die
+	     SELECT-Kommandos mit diesen Application Identifiers selbstständig aus.
+	     Es sind öffentlich standardisierte EMV-AIDs (RID + PIX).
+
+	     WICHTIG: Vor dem Test gegen die eigenen Karten prüfen, ob der jeweilige
+	     AID getroffen wird – der tatsächlich selektierte AID wird im Test Lab
+	     je Scan angezeigt. Siehe SETUP.md. -->
+	<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
+	<array>
+		<!-- Visa -->
+		<string>A0000000031010</string>
+		<!-- Visa Electron -->
+		<string>A0000000032010</string>
+		<!-- V PAY -->
+		<string>A0000000032020</string>
+		<!-- Mastercard -->
+		<string>A0000000041010</string>
+		<!-- Maestro -->
+		<string>A0000000043060</string>
+		<!-- girocard (Deutschland) -->
+		<string>D27600002545500100</string>
+		<!-- American Express -->
+		<string>A00000002501</string>
+		<!-- JCB -->
+		<string>A0000000651010</string>
+		<!-- UnionPay -->
+		<string>A000000333010101</string>
+	</array>
+</dict>
+</plist>

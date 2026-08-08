@@ -1,0 +1,44 @@
+# XcodeGen-Projektbeschreibung.
+#
+#   brew install xcodegen
+#   cd KeyFocus && xcodegen generate && open KeyFocus.xcodeproj
+#
+# Wer XcodeGen nicht nutzen will, findet in SETUP.md die Schritte, um das
+# Projekt von Hand in Xcode anzulegen.
+
+name: KeyFocus
+
+options:
+  bundleIdPrefix: de.example
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"          # Swift-6-Sprachmodus (strikte Nebenläufigkeit)
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+
+targets:
+  KeyFocus:
+    type: application
+    platform: iOS
+    sources:
+      - path: KeyFocus
+        excludes:
+          - "Info.plist"
+          - "KeyFocus.entitlements"
+    settings:
+      base:
+        PRODUCT_NAME: KeyFocus
+        PRODUCT_BUNDLE_IDENTIFIER: de.example.KeyFocus
+        INFOPLIST_FILE: KeyFocus/Info.plist
+        CODE_SIGN_ENTITLEMENTS: KeyFocus/KeyFocus.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1"     # nur iPhone
+        SWIFT_STRICT_CONCURRENCY: complete
+        SWIFT_EMIT_LOC_STRINGS: NO
+        # Eigenes Team eintragen oder in Xcode unter "Signing & Capabilities"
+        # auswählen. Ein echtes Team ist Pflicht: die NFC- und
+        # Family-Controls-Capabilities funktionieren nicht mit "None".
+        DEVELOPMENT_TEAM: ""
