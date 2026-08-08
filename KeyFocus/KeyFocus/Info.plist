@@ -57,6 +57,17 @@
 		<string>A0000000651010</string>
 		<!-- UnionPay -->
 		<string>A000000333010101</string>
+
+		<!-- eID-Anwendung des deutschen Personalausweises.
+		     Nur damit die Karte im Test Lab zuverlässig erkannt wird. Gelesen
+		     wird auch hier ausschließlich der Identifier aus der
+		     ISO14443-Antikollision – der liegt VOR jeder Authentisierung an
+		     und braucht weder PIN noch CAN.
+
+		     Auf die eigentlichen Ausweisdaten greift die App nicht zu: das
+		     erfordert PACE (PIN/CAN/MRZ) und ein Berechtigungszertifikat des
+		     BVA. Beides ist hier weder vorhanden noch gewollt. -->
+		<string>E80704007F00070302</string>
 	</array>
 </dict>
 </plist>
