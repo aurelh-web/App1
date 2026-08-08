@@ -70,6 +70,21 @@ dort entscheidet allein die Messreihe.
 
 ## 2. Bauen und starten
 
+Das Projekt erzeugt **zwei Apps**:
+
+| | CardProbe | KeyFocus |
+|---|---|---|
+| Zweck | nur die Messung | vollständige App mit Blocking |
+| Capabilities | nur NFC | NFC **+ Family Controls** |
+| Deployment-Target | iOS 17 | iOS 26 |
+| Zahlkarten-Modus | ja (braucht iOS 26 + EU) | ja |
+| „Andere Karte" | ja | ja |
+
+**Fang mit CardProbe an.** Um zu erfahren, ob eine Karte als Schlüssel taugt,
+braucht es weder Screen Time noch Shields noch Keychain – jede dieser
+Abhängigkeiten ist aber eine eigene Fehlerquelle beim Bauen und Signieren.
+CardProbe hat nur die NFC-Capability und beantwortet dieselbe Frage.
+
 ### Weg A – XcodeGen (empfohlen)
 
 ```bash
@@ -77,7 +92,17 @@ brew install xcodegen
 cd KeyFocus
 xcodegen generate
 open KeyFocus.xcodeproj
+# Scheme "CardProbe" wählen, auf dem iPhone starten
 ```
+
+### Was du zum Testen brauchst
+
+| | |
+|---|---|
+| Mac mit Xcode 26 | zwingend |
+| Physisches iPhone | NFC gibt es im Simulator nicht |
+| Apple Developer Program (~99 €/Jahr) | NFC- und Family-Controls-Capability sind für kostenlose Personal Teams nicht verfügbar |
+| iOS 26 + EU-Apple-ID | **nur** für den Zahlkarten-Modus. „Andere Karte" läuft ab iOS 17 |
 
 ### Weg B – von Hand in Xcode
 

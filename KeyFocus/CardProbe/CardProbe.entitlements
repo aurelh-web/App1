@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Einzige benötigte Capability: "Near Field Communication Tag Reading".
+	     Bewusst KEIN Family Controls – CardProbe blockiert nichts, es misst nur.
+	     Damit fällt die Capability weg, die in der Haupt-App am ehesten
+	     Einrichtungsaufwand macht. -->
+	<key>com.apple.developer.nfc.readersession.formats</key>
+	<array>
+		<string>TAG</string>
+	</array>
+</dict>
+</plist>

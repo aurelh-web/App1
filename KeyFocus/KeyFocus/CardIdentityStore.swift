@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import Observation
 
@@ -52,14 +51,9 @@ final class CardIdentityStore {
     }
 
     /// Bildet den Hash. Der Identifier wird hier verbraucht und nicht behalten.
-    ///
-    /// `nonisolated`, weil das direkt im NFC-Delegate auf der Session-Queue
-    /// aufgerufen wird – der rohe Identifier soll gar nicht erst auf den
-    /// MainActor wandern, sondern sofort an der Fundstelle zu einem Hash werden.
+    /// Siehe `sha256Hex` in Hashing.swift.
     nonisolated static func hash(identifier: Data) -> String {
-        SHA256.hash(data: identifier)
-            .map { String(format: "%02x", $0) }
-            .joined()
+        sha256Hex(identifier)
     }
 
     /// Registriert eine Karte. Erwartet den bereits gebildeten Hash, damit der

@@ -1,28 +1,63 @@
-# XcodeGen-Projektbeschreibung.
+# XcodeGen-Projektbeschreibung – erzeugt ZWEI Targets.
 #
 #   brew install xcodegen
 #   cd KeyFocus && xcodegen generate && open KeyFocus.xcodeproj
 #
-# Wer XcodeGen nicht nutzen will, findet in SETUP.md die Schritte, um das
-# Projekt von Hand in Xcode anzulegen.
+# CardProbe  – die Messung allein. Nur NFC-Capability, iOS 17+.
+#              Damit zuerst testen: weniger Teile, die schiefgehen können.
+# KeyFocus   – die vollständige App mit Screen-Time-Blocking. iOS 26+.
+#
+# Wer XcodeGen nicht nutzen will, findet in SETUP.md die Schritte, um die
+# Projekte von Hand in Xcode anzulegen.
 
 name: KeyFocus
 
 options:
   bundleIdPrefix: de.example
-  deploymentTarget:
-    iOS: "26.0"
   createIntermediateGroups: true
 
 settings:
   base:
     SWIFT_VERSION: "6.0"          # Swift-6-Sprachmodus (strikte Nebenläufigkeit)
-    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
 
 targets:
+
+  # ---------------------------------------------------------------------
+  # Messung – zuerst bauen. Braucht nur die NFC-Capability.
+  # ---------------------------------------------------------------------
+  CardProbe:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: CardProbe
+        excludes:
+          - "Info.plist"
+          - "CardProbe.entitlements"
+      # Aus der Haupt-App mitbenutzt. Keine dieser Dateien importiert
+      # FamilyControls oder ManagedSettings, deshalb baut CardProbe ohne
+      # jede Screen-Time-Abhängigkeit.
+      - path: KeyFocus/Models.swift
+      - path: KeyFocus/NFCManager.swift
+      - path: KeyFocus/Hashing.swift
+    settings:
+      base:
+        PRODUCT_NAME: CardProbe
+        PRODUCT_BUNDLE_IDENTIFIER: de.example.CardProbe
+        INFOPLIST_FILE: CardProbe/Info.plist
+        CODE_SIGN_ENTITLEMENTS: CardProbe/CardProbe.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_STRICT_CONCURRENCY: complete
+        DEVELOPMENT_TEAM: ""
+
+  # ---------------------------------------------------------------------
+  # Vollständige App. Braucht zusätzlich die Family-Controls-Capability.
+  # ---------------------------------------------------------------------
   KeyFocus:
     type: application
     platform: iOS
+    deploymentTarget: "26.0"
     sources:
       - path: KeyFocus
         excludes:
@@ -35,7 +70,7 @@ targets:
         INFOPLIST_FILE: KeyFocus/Info.plist
         CODE_SIGN_ENTITLEMENTS: KeyFocus/KeyFocus.entitlements
         GENERATE_INFOPLIST_FILE: NO
-        TARGETED_DEVICE_FAMILY: "1"     # nur iPhone
+        TARGETED_DEVICE_FAMILY: "1"
         SWIFT_STRICT_CONCURRENCY: complete
         SWIFT_EMIT_LOC_STRINGS: NO
         # Eigenes Team eintragen oder in Xcode unter "Signing & Capabilities"

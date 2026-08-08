@@ -40,10 +40,17 @@ final class NFCManager: NSObject {
 
     /// Ob speziell das Lesen von Zahlkarten erlaubt ist.
     ///
-    /// Laut Apple false, wenn Gerät/Account nicht EU-berechtigt sind. Das ist
-    /// der Gatekeeper für diese gesamte App.
+    /// Laut Apple false, wenn Gerät/Account nicht EU-berechtigt sind.
+    ///
+    /// Die Verfügbarkeitsprüfung erlaubt es, dieselbe Datei auch in Targets mit
+    /// niedrigerem Deployment-Target zu übersetzen (CardProbe zielt auf iOS 17,
+    /// damit die Messung auf mehr Geräten läuft). Der `.anyTag`-Modus ist von
+    /// iOS 26 ohnehin nicht abhängig.
     static var paymentReadingAvailable: Bool {
-        NFCPaymentTagReaderSession.readingAvailable
+        if #available(iOS 26.0, *) {
+            return NFCPaymentTagReaderSession.readingAvailable
+        }
+        return false
     }
 
     /// Startet einen Scan. Das Ergebnis kommt über `completion` auf dem MainActor.
@@ -66,7 +73,7 @@ final class NFCManager: NSObject {
 
         switch mode {
         case .payment:
-            guard Self.paymentReadingAvailable else {
+            guard #available(iOS 26.0, *), Self.paymentReadingAvailable else {
                 fail(.paymentSessionUnavailable, completion: completion)
                 return
             }
@@ -197,7 +204,7 @@ extension NFCManager: NFCTagReaderSessionDelegate {
 
         // Hash sofort bilden, damit der rohe Identifier diese Funktion nicht verlässt.
         let outcome = ScanOutcome(
-            identifierHash: CardIdentityStore.hash(identifier: identifier),
+            identifierHash: sha256Hex(identifier),
             selectedAID: aid,
             identifierByteCount: identifier.count,
             looksRandomized: IdentifierHeuristics.looksRandomized(identifier),
@@ -217,6 +224,21 @@ extension NFCManager: NFCTagReaderSessionDelegate {
         guard let readerError = error as? NFCReaderError else {
             return .readFailed(error.localizedDescription)
         }
+
+        // Neu in iOS 26 (ObjC: NFCReaderErrorIneligible): Gerät oder Account
+        // sind nicht für das Lesen von Zahlkarten berechtigt – in der Praxis:
+        // außerhalb der EU.
+        //
+        // Steht bewusst VOR dem Switch: Der Enum-Fall ist selbst als iOS 26+
+        // markiert und ließe sich in einem Target mit niedrigerem
+        // Deployment-Target sonst gar nicht erst übersetzen.
+        //
+        // Sollte dieses Symbol in deinem SDK anders heißen, ist das die
+        // einzige anzupassende Stelle.
+        if #available(iOS 26.0, *), readerError.code == .readerErrorIneligible {
+            return .ineligibleRegionOrAccount
+        }
+
         switch readerError.code {
         case .readerSessionInvalidationErrorUserCanceled:
             return .cancelledByUser
@@ -226,14 +248,6 @@ extension NFCManager: NFCTagReaderSessionDelegate {
             return .cardRemovedTooQuickly
         case .readerTransceiveErrorTagConnectionLost:
             return .cardRemovedTooQuickly
-
-        // Neu in iOS 26 (ObjC: NFCReaderErrorIneligible). Signalisiert, dass
-        // Gerät oder Account nicht für das Lesen von Zahlkarten berechtigt sind
-        // – in der Praxis: außerhalb der EU. Sollte dieses Symbol in deinem SDK
-        // anders heißen, ist das die einzige Zeile, die anzupassen ist.
-        case .readerErrorIneligible:
-            return .ineligibleRegionOrAccount
-
         case .readerErrorUnsupportedFeature, .readerErrorSecurityViolation:
             return .paymentSessionUnavailable
         default:
