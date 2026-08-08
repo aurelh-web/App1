@@ -208,10 +208,12 @@ struct ContentView: View {
         } else if registrationMode == .payment, !NFCManager.paymentReadingAvailable {
             // Betrifft nur den Zahlkarten-Modus – „Andere Karte" läuft über die
             // normale Session und ist von der EU-Beschränkung nicht betroffen.
+            // Der Modus-Name steht bewusst in typografischen Anführungszeichen:
+            // ein ASCII-" würde den Swift-String hier mitten im Satz beenden.
             noticeBox(
                 ScanFailure.paymentSessionUnavailable.message
-                + "\n\nTipp: Mit „Andere Karte" funktioniert jede andere "
-                + "NFC-Karte ohne diese Einschränkung."
+                + "\n\nTipp: Mit \u{201E}Andere Karte\u{201C} funktioniert jede "
+                + "andere NFC-Karte ohne diese Einschränkung."
             )
         }
     }
